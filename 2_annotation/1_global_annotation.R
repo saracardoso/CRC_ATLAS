@@ -1,6 +1,6 @@
 project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
 
-# Load merged CRC atlas:
+# Load integrated CRC atlas:
 CRCatlas_integrated = SeuratDisk::LoadH5Seurat(paste(project_dir, '1_merge/CRC_integrated.h5Seurat', sep='/'))
 
 
@@ -39,7 +39,6 @@ Seurat::DimHeatmap(CRCatlas_integrated, dims=1:21, cells=500, balanced=TRUE)
 
 # Determine the K-nearest neighbor graph
 CRCatlas_integrated = Seurat::FindNeighbors(CRCatlas_integrated, dims=1:elbow)
-
 
 # Find clusters (the resolution is set to a small value because we first only want to separate the cells into bigger clusters):
 CRCatlas_integrated = Seurat::FindClusters(CRCatlas_integrated, resolution = 0.1)

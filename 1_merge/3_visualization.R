@@ -1,6 +1,6 @@
 project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
 
-# Load merged CRC atlas:
+# Load integrated CRC atlas:
 CRCatlas_integrated = SeuratDisk::LoadH5Seurat(paste(project_dir, '1_merge/CRC_integrated.h5Seurat', sep='/'))
 
 
@@ -215,17 +215,4 @@ cd31cd38_31 = Seurat::DimPlot(CRCatlas_integrated, cells.highlight=cd31cd38_cell
   Seurat::NoLegend() + ggplot2::xlab('') + ggplot2::ylab('') +  ggplot2::ggtitle('') +
   ggplot2::theme(axis.ticks.y=ggplot2::element_blank(), axis.text.y=ggplot2::element_blank(), axis.line.y=ggplot2::element_blank())
 (dim_dt_ann + ggplot2::ggtitle('CD38+CD31+ Cells')) / (cd31cd38_11 | cd31cd38_21 | cd31cd38_31)
-# Integration of cells and mapping is only necessary if we want to characterize cells from 'scratch', as then the raw counts are used
-# (or normalized data, but not the integration values). Here, the initial cell-types were already annotated by the authors and, without any
-# integration, equivalent cell-type annotations group together, instead of grouping datasets together.
-
-# These shows that these annotations can be used as a starting point CRC for deconvolution and as the level 1 annotation of this atlas:
-# - Cancer: 'Cancer', 'Epithelial', 'Epithelial cells'
-# - Stromal Cells: 'EC', 'Enteric_glia', 'Fibroblast', 'Stromal cells'
-# - Myeloids cells: 'Mast cells', 'Myeloid', 'Myeloids'
-# - T cells: 'T cells', 'T_cell'
-# - B cells: 'B cells', 'B_cell'
-
-
-
 
