@@ -34,51 +34,107 @@ gc()
 
 # Run PCA:
 Myeloid = Seurat::RunPCA(Myeloid, assay='integrated')
-# Find the number of PCs to use:
-pct = Myeloid[["pca"]]@stdev /sum(Myeloid[["pca"]]@stdev) * 100
-cumu = cumsum(pct)
-co1 = which(cumu > 90 & pct < 5)[1]
-co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
-elbow = min(co1, co2) # 25
-
-plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
-ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
-  ggplot2::geom_text() + 
-  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
-  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
-  ggplot2::theme_bw()
-
-Seurat::DimHeatmap(Myeloid, dims=1:27, cells=500, balanced=TRUE)
 
 
 
 # -----
-# - Find Clusters
+# - Find First Clusters and Annotate Them
 # -----
+
+# 1. Find first clusters
 
 # Determine the K-nearest neighbor graph
-Myeloid = Seurat::FindNeighbors(Myeloid, dims=1:elbow)
-
+Myeloid = Seurat::FindNeighbors(Myeloid, dims=1:50)
 # Find clusters:
-Myeloid = Seurat::FindClusters(Myeloid, resolution=c(0.4, 0.6, 1))
-
+Myeloid = Seurat::FindClusters(Myeloid, resolution=seq(0.1, 1, by=.1))
 # UMAP:
-Myeloid = Seurat::RunUMAP(Myeloid, dims=1:elbow, reduction='pca')
-
-# Save object with clusters:
+Myeloid = Seurat::RunUMAP(Myeloid, dims=1:50, reduction='pca')
+# Save object with first clusters:
 SeuratDisk::SaveH5Seurat(Myeloid, paste(project_dir, '2_annotation/data/Myeloid_integratedClusters.h5Seurat', sep='/'))
+
+# 2. Choose best resolution using clustree:
+library(ggraph)
+clust_tree = clustree::clustree(Myeloid, prefix='integrated_snn_res.')
+clust_tree
+
+# 3. Visualize the first two resolution (second resolution was chosen to be the best for now):
+clusters_01 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.8)
+clusters_02 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.2', label=TRUE, label.size=6, pt.size=.8)
+(clusters_01 | clusters_02)
+
+
+
+# ---
+# - Check SIGMA for further clusterability (res.0.2)
+# ---
+
+# 1. Get data processed for SIGMA
+# 1.1. Subset cells to half of the original
+n_cells = round(dim(Myeloid@assays$integrated@data)[2] / 2)
+sampled_cells = colnames(Myeloid@assays$integrated@data)[sample(1:dim(Myeloid@assays$integrated@data)[2], n_cells)]
+# 1.2. Check if subsetting still resembles unsubsetted dataset
+clusters_02 | Seurat::DimPlot(subset(Myeloid, cells=sampled_cells), reduction="umap", group.by='integrated_snn_res.0.2',
+                              label=TRUE, label.size=6, pt.size=.8)
+# 1.3. Subset dataset
+Myeloid_subset = subset(Myeloid, cells=sampled_cells)
+# 1.4. Get raw counts data, perform normalization, log transformation and use only genes present in the integrated dataset (the one used for
+#      clustering)
+sigma_data = as.matrix(SeuratObject::GetAssayData(Myeloid_subset, assay='RNA', slot='counts'))
+sigma_data = sigma_data[rowSums(sigma_data) > 0,]
+invisible(gc())
+sigma_data_norm = t(t(sigma_data)/colSums(sigma_data))*10000
+invisible(gc())
+sigma_data_norm = log(sigma_data_norm + 1)
+invisible(gc())
+sigma_data_norm = sigma_data_norm[rownames(Myeloid_subset@assays$integrated@data), ]
+invisible(gc())
+# 1.5. Get vector with resolution 0.2 clusters
+clusters_02_vector = Myeloid_subset@meta.data[colnames(sigma_data), 'integrated_snn_res.0.2']
+
+# 2. Factors to be excluded from considering while calculating the clusterability
+data("ribosomal_genes", package='SIGMA')
+data("stress_genes", package='SIGMA')
+rb.genes =  intersect(rb.genes, rownames(sigma_data_norm)) 
+stress.genes = intersect(stress.genes, rownames(sigma_data_norm))
+exclude = data.frame(clsm = log(colSums(sigma_data[rownames(Myeloid_subset@assays$integrated@data),]) + 1),
+                     cellcycle = Myeloid_subset$CC.Difference,
+                     mt = colMeans(sigma_data_norm[grep("^MT-", rownames(sigma_data_norm)),]),
+                     ribosomal = colMeans(sigma_data_norm[rb.genes,]), stress = colMeans(sigma_data_norm[stress.genes,]))
+remove(sigma_data)
+invisible(gc())
+
+# 3. Run SIGMA
+clusterability_res02_1 = SIGMA::sigma_funct(sigma_data_norm, clusters=clusters_02_vector, exclude=exclude)
+
+# 4. Check results
+# 4.1. Clusterability of all clusters
+SIGMA::plot_sigma(clusterability_res02_1)
+# 4.2. MP distribution for each cluster
+for(i in as.character(0:9)) SIGMA::plot_MP(clusterability_res02_1, i)
+# 4.3. Plot singular vectors for each cluster
+for(i in as.character(0:9)){
+  plot_svi = SIGMA::plot_singular_vectors(clusterability_res02_1, i) + ggplot2::ggtitle(i)
+  print(plot_svi)
+}
+# 4.4. Analyse cluster 0
+SIGMA::get_var_genes(clusterability_res02_1, '0')[,1:2]
+SIGMA::plot_singular_vectors(clusterability_res02_1, '0', colour='SOD2')
+
+
+
+
+
+
+
+
+
+
 
 
 
 # -----
 # - Visualize Clusters
 # -----
-
-# Cluster from the three resolutions:
-clusters_04 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6)
-clusters_06 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.6', label=TRUE, label.size=6)
-clusters_1 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.1', label=TRUE, label.size=6)
-(clusters_04 | clusters_06) / (clusters_1 | ggplot2::ggplot())
 
 # Choose resolution 0.6
 res = 'integrated_snn_res.0.6'
@@ -116,12 +172,47 @@ clusters_06 | vlngenePlot
 
 
 
+
+# -----
+# - Calculate similarity between clusters
+# -----
+
+# Calculate average and median expression profiles of each cluster:
+n_genes = dim(Myeloid@assays$RNA@data)[1]
+n_clusters = length(unique(Myeloid@meta.data[,res]))
+average_profiles = matrix(rep(0, n_genes * n_clusters), nrow = n_genes)
+colnames(average_profiles) = as.character(c(0:(n_clusters-1)))
+rownames(average_profiles) = rownames(Myeloid@assays$RNA@data)
+for(clust in as.character(c(0:(n_clusters-1)))){
+  message('Cluster:', clust)
+  clust_cells = rownames(Myeloid@meta.data)[Myeloid@meta.data[,res] == clust]
+  clust_matrix = as.matrix(Myeloid@assays$RNA@data[,clust_cells])
+  average_profiles[,clust] = rowMeans(clust_matrix)
+  invisible(gc())
+}
+
+# Calculate distance matrices between clusters:
+dist_average_clusts = dist(t(average_profiles), method='euclidean')
+
+# Visualize distance matrices:
+dist_average_clusts_matrix = as.matrix(dist_average_clusts)
+#dist_average_clusts_matrix[upper.tri(dist_average_clusts_matrix)] <- NA
+pheatmap::pheatmap(dist_average_clusts_matrix, cluster_rows=F, cluster_cols=F, na_col="white", display_numbers=TRUE,
+                   main='Clusters distance based on average profiles')
+
+# Create dendogram:
+hclust_average_clusters = hclust(dist_average_clusts, method='complete')
+plot(hclust_average_clusters, main='Clustering based on average profiles')
+
+
+
+
 # -----
 # - Find markers
 # -----
 
 Seurat::Idents(Myeloid) = res
-Myeloid_markers = Seurat::FindAllMarkers(Myeloid, assay='RNA', slot='data', logfc.threshold=1, only.pos=TRUE)
+Myeloid_markers = Seurat::FindAllMarkers(Myeloid, assay='RNA', slot='data', logfc.threshold=.8, only.pos=TRUE)
 View(Myeloid_markers)
 write.csv(Myeloid_markers, paste(project_dir, '2_annotation/markers/Myeloid/Myeloid_res06.csv', sep='/'))
 
@@ -130,27 +221,40 @@ Myeloid_markers_top20 = dplyr::top_n(dplyr::group_by(Myeloid_markers[Myeloid_mar
 View(Myeloid_markers_top20)
 write.csv(Myeloid_markers_top20, paste(project_dir, '2_annotation/markers/Myeloid/Myeloid_res06_top20.csv', sep='/'))
 
-# Clusters highlighted in the full atlas:
-CRCatlas_integrated = SeuratDisk::LoadH5Seurat('/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/CRC_annotations.h5Seurat')
-for(cluster in as.character(0:19)){
-  cluster_cells = rownames(Myeloid@meta.data)[Myeloid@meta.data$integrated_snn_res.0.6==cluster]
-  grDevices::png(filename = paste(project_dir, '/2_annotation/figures/Myeloid/Cluster',
-                                  cluster, '.png', sep=''), width=805, height=461)
-  print(Seurat::DimPlot(CRCatlas_integrated, cells.highlight = cluster_cells) +
-          ggplot2::ggtitle(paste('Cluster', cluster)) + Seurat::NoLegend())
-  dev.off()
-}
 
-# Heatmap with the gene markers:
-Myeloid = Seurat::NormalizeData(Myeloid, assay='RNA')
-Myeloid = Seurat::ScaleData(Myeloid, assay='RNA')
-gene_markers = unique(Myeloid_markers_top20$gene)
-sub_cells = subset(Myeloid, downsample=600)
-sub_cells = Seurat::NormalizeData(sub_cells, assay='RNA')
-sub_cells = Seurat::ScaleData(sub_cells, assay='RNA')
-Seurat::DoHeatmap(sub_cells, features=gene_markers[1:60], assay='RNA')
-Seurat::DoHeatmap(sub_cells, features=gene_markers[61:120], assay='RNA')
-Seurat::DoHeatmap(sub_cells, features=gene_markers[121:180], assay='RNA')
-Seurat::DoHeatmap(sub_cells, features=gene_markers[181:200], assay='RNA')
-Seurat::DoHeatmap(sub_cells, features=gene_markers[201:274], assay='RNA')
+
+
+# -----
+# - Perform trajectory analysis for macro/mono + DCs + unknown clusters
+# -----
+
+# Convert Seurat dataset to monocle, after removing mast cells cluster (5):
+monocle_Myeloid = SeuratWrappers::as.cell_data_set(subset(Myeloid, cells=rownames(Myeloid@meta.data)[Myeloid$integrated_snn_res.0.6!='5']),
+                                                   assay='integrated')
+
+# Pre-process and reduce dimensions using monocle??
+
+# Cluster cells to get different partitions (cells belonging to different trajectories, i.e., different ancestors):
+monocle_Myeloid = monocle3::cluster_cells(monocle_Myeloid)
+p1 = monocle3::plot_cells(monocle_Myeloid, color_cells_by="integrated_snn_res.0.6", show_trajectory_graph=FALSE, label_cell_groups=FALSE, 
+                          labels_per_group=1, cell_size=.8, group_label_size=5) + ggplot2::ggtitle("Colored by Seurat's clusters")
+p2 = monocle3::plot_cells(monocle_Myeloid, color_cells_by="cluster", show_trajectory_graph=FALSE, label_cell_groups=FALSE, 
+                          labels_per_group=1, cell_size=.8, group_label_size=5) + ggplot2::ggtitle("Colored by Monocle's clusters")
+p3 = monocle3::plot_cells(monocle_Myeloid, color_cells_by="partition", show_trajectory_graph=FALSE, label_cell_groups=FALSE, 
+                          labels_per_group=1, cell_size=.8, group_label_size=5) + ggplot2::ggtitle("Monocle's partitions")
+p1 | p2 | p3
+
+# Learn the trajectory graph:
+monocle_Myeloid = monocle3::learn_graph(monocle_Myeloid)
+tj1 = monocle3::plot_cells(monocle_Myeloid, color_cells_by = "integrated_snn_res.0.6", label_cell_groups=FALSE, labels_per_group=2,
+                           label_leaves=TRUE, label_branch_points=TRUE, graph_label_size=2, group_label_size=6, cell_size=.8) +
+  ggplot2::ggtitle("Trajectory with partitions") + Seurat::NoLegend()
+monocle_Myeloid = monocle3::learn_graph(monocle_Myeloid, use_partition=FALSE)
+tj2 = monocle3::plot_cells(monocle_Myeloid, color_cells_by = "integrated_snn_res.0.6", label_cell_groups=FALSE, labels_per_group=2,
+                           label_leaves=TRUE, label_branch_points=TRUE, graph_label_size=2, group_label_size=6, cell_size=.8) +
+  ggplot2::ggtitle("Trajectory without partitions") + Seurat::NoLegend()
+
+seurat_clusters = Seurat::DimPlot(subset(Myeloid, cells=rownames(Myeloid@meta.data)[Myeloid$integrated_snn_res.0.6!='5']),
+                                  reduction="umap", group.by='integrated_snn_res.0.6', label=TRUE, label.size=6, pt.size=.8)
+(seurat_clusters / p2) | tj1 | tj2
 
