@@ -1,0 +1,12 @@
+*.h5Seurat
+*.xlsx
+*.Rdata
+FINAL_ATLAS/
+cellxgene/
+original_datasets/
+*.nb.html
+old_
+CNV/
+3_generate_atlas_files/
+*.Rmd
+*/old_*

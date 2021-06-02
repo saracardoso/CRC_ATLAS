@@ -96,40 +96,37 @@ Tcells_subset = subset(Tcells, cells=sampled_cells)
 invisible(gc())
 remove(Tcells)
 invisible(gc())
-# 1.4. Get raw counts data, perform normalization, log transformation and use only genes present in the integrated dataset (the one used for
-#      clustering)
-sigma_data = as.matrix(SeuratObject::GetAssayData(Tcells_subset, assay='integrated', slot='data'))#assay='RNA', slot='counts'))
-sigma_data = sigma_data[rowSums(sigma_data) > 0,]
+# 1.4. Get integrated dataset (because of the integration between datasets)
+sigma_data = as.matrix(SeuratObject::GetAssayData(Tcells_subset, assay='integrated', slot='data'))
 invisible(gc())
-sigma_data_norm = t(t(sigma_data)/colSums(sigma_data))*10000
-invisible(gc())
-sigma_data_norm = log(sigma_data_norm + 1)
-invisible(gc())
-sigma_data_norm = sigma_data_norm[rownames(Tcells_subset@assays$integrated@data), ]
-invisible(gc())
-# 1.5. Get vector with resolution 0.2 clusters
+# 1.5. Get vector with resolution 0.1 clusters and dataset
 clusters_01_vector = Tcells_subset@meta.data[colnames(sigma_data), 'integrated_snn_res.0.1']
+dataset_vector = Tcells_subset@meta.data[colnames(sigma_data), 'dataset']
 
-# 2. Factors to be excluded from considering while calculating the clusterability
-data("ribosomal_genes", package='SIGMA')
-data("stress_genes", package='SIGMA')
-rb.genes =  intersect(rb.genes, rownames(sigma_data_norm)) 
-stress.genes = intersect(stress.genes, rownames(sigma_data_norm))
-exclude = data.frame(clsm = log(colSums(sigma_data[rownames(Tcells_subset@assays$integrated@data),]) + 1),
-                     cellcycle = Tcells_subset$CC.Difference,
-                     mt = colMeans(sigma_data_norm[grep("^MT-", rownames(sigma_data_norm)),]),
-                     ribosomal = colMeans(sigma_data_norm[rb.genes,]), stress = colMeans(sigma_data_norm[stress.genes,]))
-remove(sigma_data)
-invisible(gc())
-
-# 3. Run SIGMA
-SIGMA_all_res01 = SIGMA::sigma_funct(sigma_data, clusters_01_vector)#sigma_data_norm, clusters_01_vector, exclude=exclude)
-# 3.1. Save SIGMA result
+# 2. Run SIGMA
+SIGMA_all_res01 = SIGMA::sigma_funct(sigma_data, clusters_01_vector)
+# 2.1. Save SIGMA result
 saveRDS(SIGMA_all_res01, paste(project_dir, '2_annotation/Results/Tcells/SIGMA_all_res01.Rdata', sep='/'))
 
-# 4. Check results
-# 4.1. Clusterability of all clusters
-SIGMA::plot_sigma(SIGMA_all_res01) # All clusters have a sigma value greater than 0.88
+# 3. Check results
+# 3.1. Clusterability of all clusters
+SIGMA::plot_sigma(SIGMA_all_res01) # All clusters have a sigma value greater than 0.90.
+SIGMA_all_res01$maximum_measure # min (Cluster 4) = 0.9424960; max (Cluster 0) = 0.9761377
+# 3.2. Check that clusterability is not due to datasets
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '0', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='0']) +
+  ggplot2::ggtitle('Cluster 0')
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '1', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='1']) +
+  ggplot2::ggtitle('Cluster 1')
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '2', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='2']) +
+  ggplot2::ggtitle('Cluster 2')
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '3', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='3']) +
+  ggplot2::ggtitle('Cluster 3')
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '4', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='4']) +
+  ggplot2::ggtitle('Cluster 4')
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '5', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='5']) +
+  ggplot2::ggtitle('Cluster 5')
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '6', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.1=='6']) +
+  ggplot2::ggtitle('Cluster 6')
 
 
 
@@ -203,6 +200,7 @@ for(clust in as.character(unique(Tcells_0_markers$cluster))){
 View(Tcells_0_markers_top20)
 write.csv(Tcells_0_markers_top20, paste(project_dir, '2_annotation/Results/Tcells/markers_C0_res04_top20.csv', sep='/'))
 
+
 # 4. Annotate sub-clusters:
 # Sub-cluster 0        --> CD4 central memory (CM)
 # Sub-cluster 1        --> naive CD4
@@ -211,16 +209,145 @@ write.csv(Tcells_0_markers_top20, paste(project_dir, '2_annotation/Results/Tcell
 # Sub-cluster 7        --> Th17
 # Sub-cluster8         --> IFN response related CD4
 
-# 5. Check previous SIGMA result and colour cluster 0 by new sub-clusters
+
+# 5. Perform trajectory analysis to help in this annotation:
+# 5.1. Convert Seurat dataset to monocle and use monocle's UMAP:
+monocle_Tcells_0 = SeuratWrappers::as.cell_data_set(Tcells_0, assay='integrated')
+monocle_Tcells_0 = monocle3::reduce_dimension(monocle_Tcells_0, reduction_method='UMAP', preprocess_method='PCA')
+seurat_clusters = monocle3::plot_cells(monocle_Tcells_0, show_trajectory_graph=FALSE, color_cells_by="integrated_snn_res.0.4",
+                                       group_label_size=5, cell_size=.8) + ggplot2::ggtitle("Colored by Seurat's clusters")
+# 5.2. Cluster cells to get different partitions (cells belonging to different trajectories, i.e., different ancestors):
+monocle_Tcells_0 = monocle3::cluster_cells(monocle_Tcells_0)
+p2 = monocle3::plot_cells(monocle_Tcells_0, color_cells_by="cluster", show_trajectory_graph=FALSE,
+                          cell_size=.8, group_label_size=5) + ggplot2::ggtitle("Colored by Monocle's clusters")
+p3 = monocle3::plot_cells(monocle_Tcells_0, color_cells_by="partition", show_trajectory_graph=FALSE,
+                          cell_size=.8, group_label_size=5) + ggplot2::ggtitle("Monocle's partitions")
+seurat_clusters | p2 | p3
+# 5.3. Learn the trajectory graph:
+monocle_Tcells_0 = monocle3::learn_graph(monocle_Tcells_0)
+tj1 = monocle3::plot_cells(monocle_Tcells_0, color_cells_by = "integrated_snn_res.0.4", label_cell_groups=FALSE, labels_per_group=2,
+                           label_leaves=TRUE, label_branch_points=TRUE, graph_label_size=2, group_label_size=6, cell_size=.8) +
+  ggplot2::ggtitle("Trajectory") + Seurat::NoLegend()
+(seurat_clusters / p2) | tj1
+# 5.4. Order cells in pseudo-time
+monocle_Tcells_0 = monocle3::order_cells(monocle_Tcells_0)
+tjtime =  monocle3::plot_cells(monocle_Tcells_0, color_cells_by = "pseudotime", label_cell_groups=FALSE,
+                               label_leaves=FALSE, label_branch_points=FALSE, graph_label_size=3, group_label_size=6, cell_size=.8) +
+  ggplot2::ggtitle("Trajectory coloured by pseudo-time") + Seurat::NoLegend()
+tj1 | tjtime
+# 5.5. Visualize cells ordered by pseudotime
+pdata_monocle_Tcells_0 = monocle3::pData(monocle_Tcells_0)
+pdata_monocle_Tcells_0$pseudotime_monocle3 = monocle3::pseudotime(monocle_Tcells_0)
+pdata_monocle_Tcells_0$integrated_snn_res.0.4 = factor(pdata_monocle_Tcells_0$integrated_snn_res.0.4,
+                                                       levels=c('4', '0', '6', '3', '5', '2', '1', '7', '8'))
+ggplot2::ggplot(as.data.frame(pdata_monocle_Tcells_0), 
+                ggplot2::aes(x = pseudotime_monocle3, 
+                             y = integrated_snn_res.0.4, colour = integrated_snn_res.0.4)) +
+  ggbeeswarm::geom_quasirandom(groupOnX = FALSE) + ggplot2::theme_classic() +
+  ggplot2::xlab("monocle3 pseudotime") + ggplot2::ylab("Seurat Clusters") +
+  ggplot2::ggtitle("Cells ordered by monocle3 pseudotime") + Seurat::NoLegend()
+# 5.6. Visualize ordered pseudotime without Treg branch
+monocle_Tcells_0_noTreg = monocle3::choose_cells(monocle_Tcells_0)
+pdata_monocle_Tcells_0_noTreg = monocle3::pData(monocle_Tcells_0_noTreg)
+pdata_monocle_Tcells_0_noTreg$pseudotime_monocle3 = monocle3::pseudotime(monocle_Tcells_0_noTreg)
+pdata_monocle_Tcells_0_noTreg$integrated_snn_res.0.4 = factor(pdata_monocle_Tcells_0_noTreg$integrated_snn_res.0.4,
+                                                       levels=c('4', '0', '6', '3', '5', '2', '1', '7', '8'))
+ggplot2::ggplot(as.data.frame(pdata_monocle_Tcells_0_noTreg), 
+                ggplot2::aes(x = pseudotime_monocle3, 
+                             y = integrated_snn_res.0.4, colour = integrated_snn_res.0.4)) +
+  ggbeeswarm::geom_quasirandom(groupOnX = FALSE) + ggplot2::theme_classic() +
+  ggplot2::xlab("monocle3 pseudotime") + ggplot2::ylab("Seurat Clusters") +
+  ggplot2::ggtitle("Cells ordered by monocle3 pseudotime without Treg branch") + Seurat::NoLegend()
+
+
+# 6. Annotate sub-clusters:
+# Sub-cluster 0        --> CD4 central memory (CM)
+# Sub-cluster 1        --> naive CD4
+# Sub-cluster 2, 3, 5  --> CD4, TEM (TEMRA?)
+# Sub-clusters 6       --> CD4, TEM?
+# Sub-cluster 7        --> Th17
+# Sub-cluster8         --> IFN response related CD4
+
+
+# 7. Check previous SIGMA result and colour cluster 0 by new sub-clusters
 SIGMA_all_res01 = readRDS(paste(project_dir, '2_annotation/Results/Tcells/SIGMA_all_res01.Rdata', sep='/'))
-cluster_0_cells = rownames(Tcells@meta.data)[Tcells$integrated_snn_res.0.1=='0']
+cluster_0_cells = rownames(Tcells_0@meta.data)
 subclusters_0 = Tcells_0$integrated_snn_res.0.4[intersect(colnames(SIGMA_all_res01$input_parameters$expr), cluster_0_cells)]
-SIGMA::plot_singular_vectors(SIGMA_all_res01, '0', v1=1, v2=3, colour=subclusters_0)
-SIGMA::plot_singular_vectors(SIGMA_all_res01, '0', v1=1, v2=5, colour=subclusters_0)
+subclusters_firstAnnotations = as.character(subclusters_0)
+subclusters_firstAnnotations[subclusters_firstAnnotations%in%c('2','3','5')] = 'TEMRA?'
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '0', colour=subclusters_0)
+SIGMA::plot_singular_vectors(SIGMA_all_res01, '0', colour=subclusters_firstAnnotations)
 
-# 6. Check SIGMA for further clusterability
 
-# 7. Cluster will/ will not be further clustered
+# 7. Check SIGMA for further clusterability
+# 7.1. Subset cells to half of the original
+n_cells = round(dim(Tcells_0@assays$integrated@data)[2] / 3)
+sampled_cells = colnames(Tcells_0@assays$integrated@data)[sample(1:dim(Tcells_0@assays$integrated@data)[2], n_cells)]
+# 7.2. Check if subsetting still resembles unsubsetted dataset
+clusters_04_0 | Seurat::DimPlot(subset(Tcells_0, cells=sampled_cells), reduction="umap", group.by='integrated_snn_res.0.4',
+                                label=TRUE, label.size=6, pt.size=.2)
+# 7.3. Subset dataset
+Tcells_0_subset = subset(Tcells_0, cells=sampled_cells)
+invisible(gc())
+remove(Tcells_0)
+invisible(gc())
+# 7.4. Get integrated dataset (because of the integration between datasets)
+sigma_data = as.matrix(SeuratObject::GetAssayData(Tcells_0_subset, assay='integrated', slot='data'))
+invisible(gc())
+# 7.5. Get vector with resolution 0.4 clusters
+clusters_04_vector = Tcells_0_subset@meta.data[colnames(sigma_data), 'integrated_snn_res.0.4']
+dataset_vector = Tcells_0_subset@meta.data[colnames(sigma_data), 'dataset']
+# 7.6. Run SIGMA
+SIGMA_C0_res04 = SIGMA::sigma_funct(sigma_data, clusters_04_vector)
+invisible(gc())
+# 7.7. Save SIGMA result
+saveRDS(SIGMA_C0_res04, paste(project_dir, '2_annotation/Results/Tcells/SIGMA_C0_res04.Rdata', sep='/'))
+# 7.8. Check results
+# 7.8.1. Clusterability of all clusters
+SIGMA::plot_sigma(SIGMA_C0_res04) # All clusters have a sigma value greater than 0.8
+SIGMA_C0_res04$maximum_measure # min (Cluster 4) = 0.8873414; max (Cluster 0) = 0.9594508
+# 7.8.2. Check that clusterability is not due to datasets
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '0', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='0']) +
+  ggplot2::ggtitle('Cluster 0')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '1', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='1']) +
+  ggplot2::ggtitle('Cluster 1')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '2', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='2']) +
+  ggplot2::ggtitle('Cluster 2')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '3', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='3']) +
+  ggplot2::ggtitle('Cluster 3')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '4', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='4']) +
+  ggplot2::ggtitle('Cluster 4')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '5', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='5']) +
+  ggplot2::ggtitle('Cluster 5')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '6', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='6']) +
+  ggplot2::ggtitle('Cluster 6')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '7', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='7']) +
+  ggplot2::ggtitle('Cluster 7')
+SIGMA::plot_singular_vectors(SIGMA_C0_res04, '8', colour=dataset_vector[Tcells_0_subset@meta.data$integrated_snn_res.0.4=='8']) +
+  ggplot2::ggtitle('Cluster 8')
+
+
+# 8. For now, these cluster will not be further clustered
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
