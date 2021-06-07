@@ -79,28 +79,61 @@ chrs_genes = read.table(paste(project_dir, 'utils/gene_pos_wArms.txt', sep='/'),
 # ---
 # - Tumour vs Normal classification based on CNAs
 # ---
+#relevant_chrs = c('chr1p', 'chr1q', 'chr4p', 'chr4q', 'chr5q', 'chr6p', 'chr6q', 'chr7p', 'chr7q', 'chr8p', 'chr8q', 'chr11p', 'chr11q',
+#                  'chr12p', 'chr12q', 'chr13q', 'chr14q', 'chr15q', 'chr17p', 'chr18p', 'chr18q', 'chr19p', 'chr19q', 'chr20p', 'chr20q',
+#                  'chr21q', 'chr22q')
+#names(relevant_chrs) = c('Loss', 'Gain', 'Loss', 'Loss', 'Loss', 'Gain', 'Gain', 'Gain', 'Gain', 'Loss', 'Both', 'Loss', 'Loss', 'Gain',
+#                         'Gain', 'Gain', 'Loss', 'Loss', 'Loss', 'Loss', 'Loss', 'Both', 'Both', 'Both', 'Gain', 'Loss', 'Both')
 
-# Classify patient cells (cells with more than 1/3 of genes in a relevant chr arm with the expected aberration will be considered as tumour)
-cell_annotation = c()
-for(cell in colnames(predictions_obs)){
-  message(cell, ' ', round(which(colnames(predictions_obs)==cell) / dim(predictions_obs)[2] * 100, digits=2))
-  decision = 'Putative Normal'
-  for(rel_chr in relevant_chrs){
-    message('-', rel_chr)
-    genes_chr_arm = chrs_genes$chr_arm==rel_chr
-    n_genes = sum(genes_chr_arm)
-    if(names(relevant_chrs[relevant_chrs==rel_chr])=='Loss') as_expected = sum(predictions_obs[genes_chr_arm, cell] < 3)
-    else as_expected = sum(predictions_obs[genes_chr_arm, cell] > 3)
-    pct_expected = as_expected / n_genes
-    if(pct_expected > (1/3)){
-      decision = 'Putative Tumour'
-      break
-    }
-  }
-  cell_annotation = c(cell_annotation, decision)
-  message('')
+
+# 1. Construct large-scale CNA matrix for cells from tumour samples:
+#    Cells with more than 1/3 of their genes in a chr arm with one of the aberrations - loss or gain -  will be considered as having that
+#    aberration
+cna_matrix = as.data.frame(matrix(rep('Neutral', dim(predictions_obs)[2]*length(unique(chrs_genes$chr_arm))), nrow=dim(predictions_obs)[2]))
+colnames(cna_matrix) = unique(chrs_genes$chr_arm)
+rownames(cna_matrix) = colnames(predictions_obs)
+for(chr in unique(chrs_genes$chr_arm)){
+  message('-', chr)
+  chr_gain_decision = rep('Neutral', dim(predictions_obs)[2])
+  chr_loss_decision = rep('Neutral', dim(predictions_obs)[2])
+  
+  genes_chr_arm = chrs_genes$chr_arm==chr
+  n_genes = sum(genes_chr_arm)
+  n_gain_genes = Matrix::colSums(predictions_obs[genes_chr_arm, ] > 3)
+  n_loss_genes = Matrix::colSums(predictions_obs[genes_chr_arm, ] < 3)
+  pct_gain = n_gain_genes / n_genes
+  pct_loss = n_loss_genes / n_genes
+  
+  chr_gain_decision[pct_gain>(1/3)] = 'Gain'
+  chr_loss_decision[pct_loss>(1/3)] = 'Loss'
+  
+  chr_combined_decision = paste(chr_gain_decision, chr_loss_decision, sep='_')
+  chr_combined_decision[chr_combined_decision=='Neutral_Neutral'] = 'Neutral'
+  chr_combined_decision[chr_combined_decision=='Neutral_Loss'] = 'Loss'
+  chr_combined_decision[chr_combined_decision=='Gain_Neutral'] = 'Gain'
+  chr_combined_decision[chr_combined_decision=='Gain_Loss'] = 'Both'
+  
+  cna_matrix[,chr] = chr_combined_decision
 }
-names(cell_annotation) = colnames(predictions_obs)
+
+
+# 2. Classify patient cells (cells with an expected aberration in a relevant chr arm will be considered as tumour)
+cell_annotation = rep('Putative Normal', dim(cna_matrix)[1])
+#sub_cna = matrix(rep(FALSE, dim(cna_matrix)[1]*dim(cna_matrix)[2]), ncol=dim(cna_matrix)[2])
+#colnames(sub_cna) = colnames(cna_matrix)
+#rownames(sub_cna) = rownames(cna_matrix)
+#for(idx in 1:length(relevant_chrs)){
+#  chr = relevant_chrs[idx]
+#  expected = names(relevant_chrs)[idx]
+#  
+#  if(expected == 'Both') sub_cna[, chr] = (cna_matrix[, chr] != 'Neutral')
+#  else sub_cna[, chr] = (cna_matrix[, chr] == expected | cna_matrix[, chr] == 'Both')
+#  
+#}
+#cell_annotation[rowSums(sub_cna) > 0] = 'Putative Tumour'
+cell_annotation[rowSums(cna_matrix!='Neutral') > 0] = 'Putative Tumour'
+names(cell_annotation) = rownames(cna_matrix)
+
 
 
 
@@ -108,153 +141,137 @@ names(cell_annotation) = colnames(predictions_obs)
 
 
 # ---
-# - Hierarchical clusterings
+# - Hierarchical clusterings of inferCNV prediction values
 # ---
-heatmap_colors = colorRampPalette(c("blue", "white","red"))(n = 299)
-heatmap_color_breaks = c(seq(1,3,length=150), seq(3,6,length=150))
-
+all_chrs_text_colors = rep('black', ncol(cna_matrix))
+all_chrs_text_colors[c(5, 8, 13, 16, 21, 24, 29, 32, 37)] = 'white'
+heatmap_colors = circlize::colorRamp2(c(1, 3, 6), c("blue", "white", "red"))
 
 # 1. Heatmap of predictions with all genes
-conv = cbind(c('Reference', 'Patient'), c('grey', 'red'))
-ronv = cbind(unique(chrs_genes$V2), rainbow(length(unique(chrs_genes$V2))))
-pdf(paste(project_dir, '2_annotation/CNV/predictions_heatmaps_patient.pdf', sep='/'), width=15, height=10)
 predictions_clusts = list()
 for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert=TRUE)){
   message(patient)
+  
   message('- Getting patient data')
-  patient_preds = predictions_obs[,gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
-                                                                                  epithelial_metadata$patient==patient])]
-  probs = cbind(predictions_refs[,sample(1:dim(predictions_refs)[2], round(dim(patient_preds)[2]/2))], patient_preds)
-  cols_column = unlist(lapply(c(rep('Reference', round(dim(patient_preds)[2]/2)), rep('Patient', dim(patient_preds)[2])),
-                              FUN=function(x){conv[which(conv[,1]==x),2]}))
-  rows_column = unlist(lapply(chrs_genes$V2,
-                              FUN=function(x){ronv[which(ronv[,1]==x),2]}))
+  patient_preds = predictions_obs[, gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+                                                                                   epithelial_metadata$patient==patient])]
+  probs = as.matrix(cbind(predictions_refs[, sample(1:dim(predictions_refs)[2], round(dim(patient_preds)[2]/2))], patient_preds))
+  cell_annotations = c(rep('Normal', round(dim(patient_preds)[2]/2)),
+                       cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+                                                                                      epithelial_metadata$patient==patient])])
   message('- Performing heatmap')
-  predictions_clusts[[patient]] = heatmap(t(as.matrix(probs)), Rowv=NULL, Colv=NA, RowSideColors=cols_column, ColSideColors=rows_column,
-                                          distfun=parallelDist::parallelDist , hclustfun=fastcluster::hclust, scale='none',
-                                          main=patient, col=heatmap_colors, breaks=heatmap_color_breaks, labRow=NA, labCol=NA,
-                                          keep.dendro=TRUE)
-  legend('topleft', legend = conv[,1], fill=conv[,2], title='Source (rows)', bty="n", border=F, cex=0.7)
-  legend('bottomright', legend = ronv[,1], fill=ronv[,2], title='Chromosomes (cols)', bty="n", border=F, ncol=2, cex=0.7)
-  legend("topright", legend=c("Complete Loss", "Neutral", "Adition of > 2 copies"),fill=c("blue", "white","red"),
-         title='Values', bty="n", border=T, cex=0.7, text.width=max(strwidth(conv[,1])))
+  col_annotation = ComplexHeatmap::HeatmapAnnotation(foo = ComplexHeatmap::anno_block(gp = grid::gpar(fill = 2:length(unique(chrs_genes$chr_arm))),
+                                                                                      labels=unique(chrs_genes$chr_arm),
+                                                                                      labels_gp=grid::gpar(col=all_chrs_text_colors,
+                                                                                                           fontsize=7)),
+                                                     show_annotation_name=FALSE)
+  row_annotation = ComplexHeatmap::rowAnnotation(Annotation_1 = cell_annotations,
+                                                 col = list(Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
+                                                                             'Putative Tumour'='chocolate2')),
+                                                 show_annotation_name=FALSE)
+  predictions_clusts[[patient]] = ComplexHeatmap::Heatmap(t(probs), cluster_rows=TRUE,
+                                                          cluster_columns=FALSE, col=heatmap_colors,
+                                                          name='Heatmap Values', show_row_names=FALSE,
+                                                          show_column_names=FALSE, column_title = patient,
+                                                          column_split=factor(chrs_genes$chr_arm, unique(chrs_genes$chr_arm)),
+                                                          top_annotation=col_annotation, left_annotation=row_annotation,
+                                                          jitter=TRUE)
+  
   invisible(gc())
   message('')
+}
+pdf(paste(project_dir, '2_annotation/CNV/predictions_heatmaps_patient.pdf', sep='/'), width=20, height=12)
+for(patient in names(predictions_clusts)){
+  message(patient)
+  ComplexHeatmap::draw(predictions_clusts[[patient]])
 }
 dev.off()
 
 
 # 2. Heatmap of predictions with only genes from relevant chromosomes, and with annotation of patients' cells:
-relevant_chrs = c('chr1p', 'chr1q', 'chr4p', 'chr4q', 'chr5q', 'chr7p', 'chr7q', 'chr8p', 'chr8q', 'chr10q', 'chr13q', 'chr14q',
-                  'chr15q', 'chr17p', 'chr18q', 'chr19p', 'chr19q', 'chr20q')
-names(relevant_chrs) = c('Loss', 'Gain', 'Loss', 'Loss', 'Loss', 'Gain', 'Gain', 'Loss', 'Gain', 'Loss', 'Gain', 'Loss', 'Loss', 'Loss',
-                         'Loss', 'Gain', 'Gain', 'Gain')
-chr_arm = paste(chrs_genes$V2, chrs_genes$arm, sep='')
-chrs_genes = cbind(chrs_genes, chr_arm)
-heatmap_colors = circlize::colorRamp2(c(1, 3, 6), c("blue", "white", "red"))
-gene_to_use = chrs_genes$chr_arm%in%relevant_chrs
-literature_colors = c(rep('Loss', sum(chrs_genes$chr_arm=='chr1p')), rep('Gain', sum(chrs_genes$chr_arm=='chr1q')),
-                      rep('Loss', sum(chrs_genes$chr_arm=='chr4p')), rep('Loss', sum(chrs_genes$chr_arm=='chr4q')),
-                      rep('Loss', sum(chrs_genes$chr_arm=='chr5q')), rep('Gain', sum(chrs_genes$chr_arm=='chr7p')),
-                      rep('Gain', sum(chrs_genes$chr_arm=='chr7q')), rep('Loss', sum(chrs_genes$chr_arm=='chr8p')),
-                      rep('Gain', sum(chrs_genes$chr_arm=='chr8q')), rep('Loss', sum(chrs_genes$chr_arm=='chr10q')),
-                      rep('Gain', sum(chrs_genes$chr_arm=='chr13q')), rep('Loss', sum(chrs_genes$chr_arm=='chr14q')),
-                      rep('Loss', sum(chrs_genes$chr_arm=='chr15q')), rep('Loss', sum(chrs_genes$chr_arm=='chr17p')),
-                      rep('Loss', sum(chrs_genes$chr_arm=='chr18q')), rep('Gain', sum(chrs_genes$chr_arm=='chr19p')),
-                      rep('Gain', sum(chrs_genes$chr_arm=='chr19q')), rep('Gain', sum(chrs_genes$chr_arm=='chr20q')))
-chrs_text_colors = c('white', 'black', 'white', 'black', 'white', 'black', 'white', 'white', 'white',
-                     'black', 'white', 'black', 'white', 'black', 'white', 'white', 'white', 'white')
-predictions_clusts_relchrs = list()
-for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert=TRUE)){
-  message(patient)
-  message('- Getting patient data')
-  patient_preds = predictions_obs[gene_to_use, gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
-                                                                                              epithelial_metadata$patient==patient])]
-  probs = cbind(predictions_refs[gene_to_use, sample(1:dim(predictions_refs)[2], round(dim(patient_preds)[2]/2))], patient_preds)
-  cell_annotations = c(rep('Normal', round(dim(patient_preds)[2]/2)),
-                       cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
-                                                                                      epithelial_metadata$patient==patient])])
-  message('- Performing heatmap')
-  col_annotation = ComplexHeatmap::HeatmapAnnotation(foo = ComplexHeatmap::anno_block(gp = grid::gpar(fill = 2:length(relevant_chrs)),
-                                                                                      labels=relevant_chrs,
-                                                                                      labels_gp=grid::gpar(col=chrs_text_colors,
-                                                                                                           fontsize=7)),
-                                                     Literature = literature_colors,
-                                                     col= list(Literature=c('Gain'='red', 'Loss'='blue')), 
-                                                     show_annotation_name=FALSE)
-  row_annotation = ComplexHeatmap::rowAnnotation(Samples = c(rep('Reference', round(dim(patient_preds)[2]/2)), rep('Patient', dim(patient_preds)[2])),
-                                                 Annotation_1 = cell_annotations,
-                                                 col = list(Samples = c('Reference'='grey', 'Patient'='red'), 
-                                                            Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
-                                                                             'Putative Tumour'='chocolate2')),
-                                                 show_annotation_name=FALSE)
-  predictions_clusts_relchrs[[patient]] = ComplexHeatmap::Heatmap(t(as.matrix(probs)), cluster_rows=TRUE, cluster_columns=FALSE,
-                                                                  col=heatmap_colors, name='Heatmap Values', show_row_names=FALSE,
-                                                                  show_column_names=FALSE, column_title = patient,
-                                                                  column_split=chrs_genes$chr_arm[gene_to_use], top_annotation=col_annotation,
-                                                                  left_annotation=row_annotation,
-                                                                  jitter=TRUE)
-  invisible(gc())
-  message('')
-}
-pdf(paste(project_dir, '2_annotation/CNV/predictions_heatmaps_patient_relevant_chrs.pdf', sep='/'), width=20, height=12)
-for(patient in names(predictions_clusts_relchrs)){
-  message(patient)
-  ComplexHeatmap::draw(predictions_clusts_relchrs[[patient]])
-}
-dev.off()
+#chr_arm = paste(chrs_genes$V2, chrs_genes$arm, sep='')
+#chrs_genes = cbind(chrs_genes, chr_arm)
+#heatmap_colors = circlize::colorRamp2(c(1, 3, 6), c("blue", "white", "red"))
+#gene_to_use = chrs_genes$chr_arm%in%relevant_chrs
+#literature_colors = c(rep('Loss', sum(chrs_genes$chr_arm=='chr1p')), rep('Gain', sum(chrs_genes$chr_arm=='chr1q')),
+#                      rep('Loss', sum(chrs_genes$chr_arm=='chr4p')), rep('Loss', sum(chrs_genes$chr_arm=='chr4q')),
+#                      rep('Loss', sum(chrs_genes$chr_arm=='chr5q')), rep('Gain', sum(chrs_genes$chr_arm=='chr6p')),
+#                      rep('Gain', sum(chrs_genes$chr_arm=='chr6q')), rep('Gain', sum(chrs_genes$chr_arm=='chr7p')),
+#                      rep('Gain', sum(chrs_genes$chr_arm=='chr7q')), rep('Loss', sum(chrs_genes$chr_arm=='chr8p')),
+#                      rep('Both', sum(chrs_genes$chr_arm=='chr8q')), rep('Loss', sum(chrs_genes$chr_arm=='chr11p')),
+#                      rep('Loss', sum(chrs_genes$chr_arm=='chr11q')), rep('Gain', sum(chrs_genes$chr_arm=='chr12p')),
+#                      rep('Gain', sum(chrs_genes$chr_arm=='chr12q')), rep('Gain', sum(chrs_genes$chr_arm=='chr13q')),
+#                      rep('Loss', sum(chrs_genes$chr_arm=='chr14q')), rep('Loss', sum(chrs_genes$chr_arm=='chr15q')),
+#                      rep('Loss', sum(chrs_genes$chr_arm=='chr17p')), rep('Loss', sum(chrs_genes$chr_arm=='chr18p')),
+#                      rep('Loss', sum(chrs_genes$chr_arm=='chr18q')), rep('Both', sum(chrs_genes$chr_arm=='chr19p')),
+#                      rep('Both', sum(chrs_genes$chr_arm=='chr19q')), rep('Both', sum(chrs_genes$chr_arm=='chr20p')),
+#                      rep('Gain', sum(chrs_genes$chr_arm=='chr20q')), rep('Loss', sum(chrs_genes$chr_arm=='chr21q')),
+#                      rep('Both', sum(chrs_genes$chr_arm=='chr22q')))
+##chrs_text_colors = c('white', 'black', 'white', 'black', 'white', 'black', 'white', 'white', 'white',
+##                     'black', 'white', 'black', 'white', 'black', 'white', 'white', 'white', 'white')
+#predictions_clusts_relchrs = list()
+#for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert=TRUE)){
+#  message(patient)
+#  message('- Getting patient data')
+#  patient_preds = predictions_obs[gene_to_use, gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+#                                                                                              epithelial_metadata$patient==patient])]
+#  probs = cbind(predictions_refs[gene_to_use, sample(1:dim(predictions_refs)[2], round(dim(patient_preds)[2]/2))], patient_preds)
+#  cell_annotations = c(rep('Normal', round(dim(patient_preds)[2]/2)),
+#                       cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+#                                                                                      epithelial_metadata$patient==patient])])
+#  message('- Performing heatmap')
+#  col_annotation = ComplexHeatmap::HeatmapAnnotation(foo = ComplexHeatmap::anno_block(gp = grid::gpar(fill = 2:length(relevant_chrs)),
+#                                                                                      labels=relevant_chrs,
+#                                                                                      labels_gp=grid::gpar(#col=chrs_text_colors,
+#                                                                                                           fontsize=7)),
+#                                                     Literature = literature_colors,
+#                                                     col= list(Literature=c('Gain'='red', 'Loss'='blue', 'Both'='grey')), 
+#                                                     show_annotation_name=FALSE)
+#  row_annotation = ComplexHeatmap::rowAnnotation(Samples = c(rep('Reference', round(dim(patient_preds)[2]/2)), rep('Patient', dim(patient_preds)[2])),
+#                                                 Annotation_1 = cell_annotations,
+#                                                 col = list(Samples = c('Reference'='grey', 'Patient'='red'), 
+#                                                            Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
+#                                                                             'Putative Tumour'='chocolate2')),
+#                                                 show_annotation_name=FALSE)
+#  predictions_clusts_relchrs[[patient]] = ComplexHeatmap::Heatmap(t(as.matrix(probs)), cluster_rows=TRUE, cluster_columns=FALSE,
+#                                                                  col=heatmap_colors, name='Heatmap Values', show_row_names=FALSE,
+#                                                                  show_column_names=FALSE, column_title = patient,
+#                                                                  column_split=factor(chrs_genes$chr_arm[gene_to_use],
+#                                                                                      unique(chrs_genes$chr_arm[gene_to_use])),
+#                                                                  top_annotation=col_annotation,
+#                                                                  left_annotation=row_annotation,
+#                                                                  jitter=TRUE)
+#  invisible(gc())
+#  message('')
+#}
+#pdf(paste(project_dir, '2_annotation/CNV/predictions_heatmaps_patient_relevant_chrs.pdf', sep='/'), width=20, height=12)
+#for(patient in names(predictions_clusts_relchrs)){
+#  message(patient)
+#  ComplexHeatmap::draw(predictions_clusts_relchrs[[patient]])
+#}
+#dev.off()
 
 
 
 # ---
-# - Large-scale CNA matrix
+# - Hierarchical clusterings of large-scale CNA matrix
 # ---
-# Cells with more than 1/3 of their genes in a chr arm with one of the aberrations - loss or gain -  will be considered as having that
-# aberration
 
-
-# 1. Construct matrix for cells from tumour samples:
-cna_matrix = as.data.frame(matrix(rep('Neutral', dim(predictions_obs)[2]*length(unique(chrs_genes$chr_arm))), nrow=dim(predictions_obs)[2]))
-colnames(cna_matrix) = unique(chrs_genes$chr_arm)
-rownames(cna_matrix) = colnames(predictions_obs)
-for(cell in colnames(predictions_obs)[12412:26609]){
-  message(cell, ' ', round(which(colnames(predictions_obs)==cell) / dim(predictions_obs)[2] * 100, digits=2))
-  for(chr in unique(chrs_genes$chr_arm)){
-    message('-', chr)
-    genes_chr_arm = chrs_genes$chr_arm==chr
-    n_genes = sum(genes_chr_arm)
-    n_gain_genes = sum(predictions_obs[genes_chr_arm, cell] > 3)
-    n_loss_genes = sum(predictions_obs[genes_chr_arm, cell] < 3)
-    pct_gain = n_gain_genes / n_genes
-    pct_loss = n_loss_genes / n_genes
-    if(sum(c(pct_gain, pct_loss) > (1/3)) == 2){
-      if(max(c(pct_gain, pct_loss)) > 0.5) cna_matrix[cell, chr] = c('Gain', 'Loss')[which(c(pct_gain, pct_loss)>0.5)]
-    }
-    else{
-      if(pct_gain > (1/3)) cna_matrix[cell, chr] = 'Gain'
-      else if(pct_loss > (1/3))  cna_matrix[cell, chr] = 'Loss'
-    }
-    
-  }
-  message('')
-}
-
-
-# 2. Create heatmaps for each sample with all chromosomes:
-heatmap_colors_discrete = circlize::colorRamp2(c(1, 2, 3), c("blue", "white", "red"))
-all_chrs_text_colors = rep('black', ncol(cna_matrix))
-all_chrs_text_colors[c(5, 8, 13, 16, 21, 24, 29, 32, 37)] = 'white'
+# 1. Create heatmaps for each sample with all chromosomes:
+heatmap_colors_discrete = circlize::colorRamp2(c(-1, 0, 1, 2), c("blue", "white", "red", "grey"))
 predictions_clusts_largeScale_allchrs = list()
 for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert=TRUE)){
   message(patient)
   message('- Getting patient data')
   patient_preds = as.matrix(cna_matrix[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
                                                                                       epithelial_metadata$patient==patient]), ])
-  patient_preds[patient_preds=='Gain'] = 3
-  patient_preds[patient_preds=='Neutral'] = 2
-  patient_preds[patient_preds=='Loss'] = 1
+  patient_preds[patient_preds=='Both'] = 2
+  patient_preds[patient_preds=='Gain'] = 1
+  patient_preds[patient_preds=='Neutral'] = 0
+  patient_preds[patient_preds=='Loss'] = -1
   patient_preds = matrix(as.numeric(patient_preds),
                          ncol=ncol(patient_preds))
+  rownames(patient_preds) = rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' & epithelial_metadata$patient==patient]
   cell_annotations = cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
                                                                                     epithelial_metadata$patient==patient])]
   message('- Performing heatmap')
@@ -267,11 +284,13 @@ for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert
                                                  col = list(Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
                                                                              'Putative Tumour'='chocolate2')),
                                                  show_annotation_name=FALSE)
-  predictions_clusts_largeScale_allchrs[[patient]] = ComplexHeatmap::Heatmap(patient_preds, cluster_rows=TRUE,
+  predictions_clusts_largeScale_allchrs[[patient]] = ComplexHeatmap::Heatmap(patient_preds[rownames(predictions_clusts[[patient]]@matrix),],
+                                                                             cluster_rows=FALSE,
+                                                                             #patient_preds, cluster_rows=TRUE,
                                                                              cluster_columns=FALSE, col=heatmap_colors_discrete,
                                                                              name='Heatmap Values', show_row_names=FALSE,
                                                                              show_column_names=FALSE, column_title = patient,
-                                                                             column_split=colnames(cna_matrix),
+                                                                             column_split=factor(colnames(cna_matrix), colnames(cna_matrix)),
                                                                              top_annotation=col_annotation, left_annotation=row_annotation,
                                                                              jitter=TRUE)
   invisible(gc())
@@ -286,51 +305,56 @@ dev.off()
 
 
 # 3. Create heatmaps for each sample with only relevant chromosomes:
-predictions_clusts_largeScale_relchrs = list()
-for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert=TRUE)){
-  message(patient)
-  message('- Getting patient data')
-  patient_preds = as.matrix(cna_matrix[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
-                                                                                      epithelial_metadata$patient==patient]), relevant_chrs])
-  patient_preds[patient_preds=='Gain'] = 3
-  patient_preds[patient_preds=='Neutral'] = 2
-  patient_preds[patient_preds=='Loss'] = 1
-  patient_preds = matrix(as.numeric(patient_preds),
-                         ncol=ncol(patient_preds))
-  cell_annotations = cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
-                                                                                    epithelial_metadata$patient==patient])]
-  message('- Performing heatmap')
-  col_annotation = ComplexHeatmap::HeatmapAnnotation(foo = ComplexHeatmap::anno_block(gp = grid::gpar(fill = 2:length(relevant_chrs)),
-                                                                                      labels=relevant_chrs,
-                                                                                      labels_gp=grid::gpar(col=chrs_text_colors,
-                                                                                                           fontsize=7)),
-                                                     Literature = names(relevant_chrs),
-                                                     col= list(Literature=c('Gain'='red', 'Loss'='blue')),
-                                                     show_annotation_name=FALSE)
-  row_annotation = ComplexHeatmap::rowAnnotation(Annotation_1 = cell_annotations,
-                                                 col = list(Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
-                                                                             'Putative Tumour'='chocolate2')),
-                                                 show_annotation_name=FALSE)
-  predictions_clusts_largeScale_relchrs[[patient]] = ComplexHeatmap::Heatmap(patient_preds, cluster_rows=TRUE,
-                                                                             cluster_columns=FALSE, col=heatmap_colors_discrete,
-                                                                             name='Heatmap Values', show_row_names=FALSE,
-                                                                             show_column_names=FALSE, column_title = patient,
-                                                                             column_split=relevant_chrs,
-                                                                             top_annotation=col_annotation, left_annotation=row_annotation,
-                                                                             jitter=TRUE)
-  invisible(gc())
-  message('')
-}
-pdf(paste(project_dir, '2_annotation/CNV/largeScaleCNA_matrix_patient_relevant_chrs.pdf', sep='/'), width=20, height=12)
-for(patient in names(predictions_clusts_largeScale_relchrs)){
-  message(patient)
-  ComplexHeatmap::draw(predictions_clusts_largeScale_relchrs[[patient]])
-}
-dev.off()
+#predictions_clusts_largeScale_relchrs = list()
+#for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert=TRUE)){
+#  message(patient)
+#  message('- Getting patient data')
+#  patient_preds = as.matrix(cna_matrix[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+#                                                                                      epithelial_metadata$patient==patient]), relevant_chrs])
+#  patient_preds[patient_preds=='Both'] = 3
+#  patient_preds[patient_preds=='Gain'] = 2
+#  patient_preds[patient_preds=='Neutral'] = 0
+#  patient_preds[patient_preds=='Loss'] = 1
+#  patient_preds = matrix(as.numeric(patient_preds),
+#                         ncol=ncol(patient_preds))
+#  colnames(patient_preds) = relevant_chrs
+#  rownames(patient_preds) = gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+#                                                                           epithelial_metadata$patient==patient])
+#  cell_annotations = cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+#                                                                                    epithelial_metadata$patient==patient])]
+#  message('- Performing heatmap')
+#  col_annotation = ComplexHeatmap::HeatmapAnnotation(foo = ComplexHeatmap::anno_block(gp = grid::gpar(fill = 2:length(relevant_chrs)),
+#                                                                                      labels=relevant_chrs,
+#                                                                                      labels_gp=grid::gpar(#col=chrs_text_colors,
+#                                                                                                           fontsize=7)),
+#                                                     Literature = names(relevant_chrs),
+#                                                     col= list(Literature=c('Gain'='red', 'Loss'='blue', 'Both'='grey')),
+#                                                     show_annotation_name=FALSE)
+#  row_annotation = ComplexHeatmap::rowAnnotation(Annotation_1 = cell_annotations,
+#                                                 col = list(Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
+#                                                                             'Putative Tumour'='chocolate2')),
+#                                                 show_annotation_name=FALSE)
+#  predictions_clusts_largeScale_relchrs[[patient]] = ComplexHeatmap::Heatmap(patient_preds, cluster_rows=TRUE,
+#                                                                             cluster_columns=FALSE, col=heatmap_colors_discrete,
+#                                                                             name='Heatmap Values', show_row_names=FALSE,
+#                                                                             show_column_names=FALSE, column_title = patient,
+#                                                                             column_split=factor(relevant_chrs, relevant_chrs),
+#                                                                             top_annotation=col_annotation, left_annotation=row_annotation,
+#                                                                             jitter=TRUE)
+#  invisible(gc())
+#  message('')
+#}
+#pdf(paste(project_dir, '2_annotation/CNV/largeScaleCNA_matrix_patient_relevant_chrs.pdf', sep='/'), width=20, height=12)
+#for(patient in names(predictions_clusts_largeScale_relchrs)){
+#  message(patient)
+#  ComplexHeatmap::draw(predictions_clusts_largeScale_relchrs[[patient]])
+#}
+#dev.off()
 
 
 # 4. Store CNA analysis information in metadata slot of Epithelial's seurat dataset:
 Epithelial = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/data/Epithelial_integratedClusters.h5Seurat', sep='/'))
+invisible(gc())
 # 4.1. CNA annotation
 Epithelial[['CNA_annotation']] = rep('Normal', dim(Epithelial@meta.data)[1])
 Epithelial$CNA_annotation[gsub('[.]', '-', names(cell_annotation))] = cell_annotation
@@ -351,40 +375,98 @@ SeuratDisk::SaveH5Seurat(Epithelial, paste(project_dir, '2_annotation/data/Epith
 # - Analyse CNA results' 'distribution':
 # ---
 Epithelial = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/data/Epithelial_integratedClusters.h5Seurat', sep='/'))
-
-# 1. Subset cells to only those from tumour samples and re-cluster them:
-Epithelial_tumour = subset(Epithelial, cells=rownames(Epithelial@meta.data)[Epithelial@meta.data$state=='Tumor'])
-remove(Epithelial)
 invisible(gc())
 
-# 2. Redo dimension reduction and clustering
-Epithelial_tumour = Seurat::RunPCA(Epithelial_tumour, assay='integrated')
-Epithelial_tumour = Seurat::FindNeighbors(Epithelial_tumour, dims=1:50)
-Epithelial_tumour = Seurat::FindClusters(Epithelial_tumour, resolution=seq(0.1, 1, by=.1))
-Epithelial_tumour = Seurat::RunUMAP(Epithelial_tumour, dims=1:50, reduction='pca')
 
-# 3. Choose best resolution based solely on clustree
-library(ggraph)
-clust_tree = clustree::clustree(Epithelial_tumour, prefix='integrated_snn_res.')
-clust_tree
+# 1. Normal + Putative normal: Subset cells and run UMAP
+# 1.1. Only those from normal samples and classified as putative normal
+Epithelial_normal = subset(Epithelial, cells=rownames(Epithelial@meta.data)[Epithelial@meta.data$CNA_annotation!='Putative Tumour'])
+Epithelial_normal = Seurat::RunPCA(Epithelial_normal, assay='integrated')
+Epithelial_normal = Seurat::RunUMAP(Epithelial_normal, dims=1:50, reduction='pca')
+invisible(gc())
+# 1.2. Find clusters:
+Epithelial_normal = Seurat::FindNeighbors(Epithelial_normal, dims=1:50)
+Epithelial_normal = Seurat::FindClusters(Epithelial_normal, resolution=c(1))
+invisible(gc())
+
+
+# 2.  Normal + Putative normal: Check how cells cluster together
+# 2.1. Normal and classified as normal:
+normal_clusters = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='integrated_snn_res.1', label=T,
+                                  label.size=3, pt.size=.2) + Seurat::NoLegend()
+normal_cna = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='CNA_annotation', label=F,
+                             label.size=3, pt.size=.2, order='Putative Normal', cols=c('Normal'='grey', 'Putative Normal'='red'))
+normal_patients = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='patient', label=T,
+                                  label.size=3, pt.size=.2) + Seurat::NoLegend()
+(normal_cna | normal_patients)
+normal_clusters | normal_cna | normal_patients
+# 2.2. Check normal and putative normal distribution in clusters 21 and 29
+table(Epithelial_normal@meta.data[Epithelial_normal$integrated_snn_res.1=='21','CNA_annotation'])
+table(Epithelial_normal@meta.data[Epithelial_normal$integrated_snn_res.1=='29','CNA_annotation'])
+# Out of the 903 cells classified as putative normal, 510 (~56%) were clustered into two clusters (21 and 29), while the other 393 (~44%)
+# are distributed among other clusters.
+# Cluster 21 still contains some normal cells (~21%, all of them being from healthy samples, no matched
+# normal) clustered together with the putative normal ones. The healthy cells span 12 samples, while the putative normal span 5 patients.
+# However, these healthy cells do not map together in the umap!
+Seurat::DimPlot(subset(Epithelial_normal,
+                       cells=rownames(Epithelial_normal@meta.data)[Epithelial_normal$integrated_snn_res.1%in%c('21', '29')]),
+                reduction="umap", group.by='patient', split.by='integrated_snn_res.1', label=T, label.size=3, pt.size=.2) + Seurat::NoLegend()
+# On the other hand, cluster 29 contains only putative normal cells, all from the same patient (128 cells from SMC10). However, not all cells
+# classified as putative normal from this patient are in this cluster. Other 136 are seprated among other various clusters (including 21). 
+# Could thus this cells, from cluster 29, be in fact tumour cells?
+# 2.3. Where are putative normal mapped?
+patients_mapped = list()
+for(patient in c('SMC07', 'KUL01', 'SMC03', '31', 'SMC10', 'SMC19', 'SMC24')){
+  patient_tumour_cells = rownames(Epithelial_normal@meta.data)[Epithelial_normal$patient==patient & Epithelial_normal$state=='Tumor']
+  patients_mapped[[patient]] = Seurat::DimPlot(Epithelial_normal, cells.highlight = patient_tumour_cells) + 
+    ggplot2::theme_minimal() + Seurat::NoLegend() + ggplot2::ggtitle(patient)
+}
+patchwork::wrap_plots(patients_mapped, ncol=3)
+
+# 3.  Normal + Putative normal: Find Markers for clusters 21 and 29
+markers_21 = Seurat::FindMarkers(Epithelial_normal, assay='integrated', ident.1='21', logfc.threshold=0.8)
+markers_29 = Seurat::FindMarkers(Epithelial_normal, assay='integrated', ident.1='29', logfc.threshold=0.8)
+
+
+
+
+
+
+
+
+
+
+
+# 3. Cells were classified into normal/tumour based on relevant chromosomes, lets check the other ones:
+color_vec = c('Gain'='red', 'Loss'='blue', 'Neutral'='lightgrey')
+relevant_chrs = c('chr1p', 'chr1q', 'chr4p', 'chr4q', 'chr5q', 'chr7p', 'chr7q', 'chr8p', 'chr8q', 'chr10q', 'chr13q', 'chr14q',
+                  'chr15q', 'chr17p', 'chr18q', 'chr19p', 'chr19q', 'chr20q')
+all_chrs = grep('CNA_chr', colnames(Epithelial_normal@meta.data), value=TRUE)
+not_relevant_chrs = all_chrs[!all_chrs%in%paste('CNA', relevant_chrs, sep='_')]
+Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by=not_relevant_chrs[1:9],
+                label=FALSE, pt.size=.2, cols=color_vec, ncol=3, order=c('Gain', 'Loss'))
+Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by=not_relevant_chrs[10:18],
+                label=FALSE, pt.size=.2, cols=color_vec, ncol=3, order=c('Gain', 'Loss'))
+Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by=not_relevant_chrs[19:21],
+                label=FALSE, pt.size=.2, cols=color_vec, ncol=3, order=c('Gain', 'Loss'))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # 4. Visualy assess CNA analysis
-res_01 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
-res_02 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.2', label=TRUE, label.size=6, pt.size=.2)
-res_03 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.3', label=TRUE, label.size=6, pt.size=.2)
-res_04 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
-(res_01 | res_02) / (res_03 | res_04)
-
-patient = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='patient', label=TRUE, label.size=3, pt.size=.2)
-cna_annotation = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='CNA_annotation', label=F, label.size=3, pt.size=.2)
-(res_01 / patient) | cna_annotation
-
-not_help_cells = rownames(Epithelial_tumour@meta.data)[Epithelial_tumour$patient%in%c('SMC03', 'SMC10', 'SMC19', 'SMC22', 'SMC24')]
-not_good_cna = Seurat::DimPlot(Epithelial_tumour, cells.highlight=not_help_cells)
-(patient / cna_annotation) | not_good_cna
-
-
-
 rgb.val <- grDevices::col2rgb('grey')
 grey_transparent <- rgb(rgb.val[1], rgb.val[2], rgb.val[3],  max = 255,
              alpha = (100 - 50) * 255 / 100, names = 'greyTransparent')
@@ -453,48 +535,3 @@ ComplexHeatmap::Heatmap(cna_matrix_signatures_relChrs_heatmap, cluster_rows=FALS
                         top_annotation=col_annotation, #left_annotation=row_annotation,
                         right_annotation = right_row_annotation,
                         jitter=TRUE)
-
-
-
-
-
-
-
-
-
-# ---
-# - Assess validity of classifications:
-# ---
-Epithelial = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/data/Epithelial_integratedClusters.h5Seurat', sep='/'))
-
-#1: Subset cells to only those from tumour samples and re-cluster them:
-Epithelial_tumour = subset(Epithelial, cells=rownames(Epithelial@meta.data)[Epithelial@meta.data$state=='Tumor'])
-remove(Epithelial)
-invisible(gc())
-Epithelial_tumour = Seurat::RunPCA(Epithelial_tumour, assay='integrated')
-Epithelial_tumour = Seurat::FindNeighbors(Epithelial_tumour, dims=1:50)
-Epithelial_tumour = Seurat::FindClusters(Epithelial_tumour, resolution=0.6)
-Epithelial_tumour = Seurat::RunUMAP(Epithelial_tumour, dims=1:50, reduction='pca')
-Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.6', label=TRUE, label.size=6)
-Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='CNV_classification', label=F, label.size=6)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
