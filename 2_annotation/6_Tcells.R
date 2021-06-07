@@ -163,20 +163,17 @@ clusters_03_0 = Seurat::DimPlot(Tcells_0, reduction="umap", group.by='integrated
 clusters_04_0 = Seurat::DimPlot(Tcells_0, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
 ((clusters_01_0 | clusters_02_0) / (clusters_03_0 | clusters_04_0)) | clust_tree
 # 2.2. Feature Plots to assess known gene markers:
-feature_plots(Tcells_0, c('rna_CD3E', 'rna_CD3D', 'rna_CD8A', 'rna_CD4', 'rna_TRAC', 'rna_TRBC1', 'rna_TRBC2'),
-              ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.3')
-feature_plots(Tcells_0, c('rna_CCR7', 'rna_PDCD1', 'rna_IL2RB', 'rna_KLRB1', 'rna_CD69'),
-              ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.3')
-feature_plots(Tcells_0, c('rna_CCR7', 'rna_SELL', 'rna_IL2RB', 'rna_IL2RA', 'rna_CD69', 'rna_CREM'),
+feature_plots(Tcells_0, c('rna_CCR7', 'rna_SELL', 'rna_PASK'),
               ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.4')
-feature_plots(Tcells_0, c('rna_CCR7', 'rna_SELL', 'rna_NPM1', 'rna_LRRN3', 'rna_PASK', 'rna_IL7R'),
+feature_plots(Tcells_0, c('rna_IL2RA', 'rna_IL2RB', 'rna_IL17A'),
+              ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.4')
+feature_plots(Tcells_0, c('rna_ISG15', 'rna_IFI6', 'rna_MX1'),
+              ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.4')
+feature_plots(Tcells_0, c('rna_KLRB1', 'rna_S100A4', 'rna_PTPRCAP', 'rna_PFN1', 'rna_GZMA'),
               ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.4')
 # 2.3. Violin Plots to assess known markers:
-violin_plots(Tcells_0, c('rna_CD3E', 'rna_CD3D', 'rna_CD8A', 'rna_CD4', 'rna_TRAC', 'rna_TRBC1', 'rna_TRBC2'),
-             ncol=3, with_dimplot=TRUE, group.by='integrated_snn_res.0.3')
-violin_plots(Tcells_0, c('rna_CCR7', 'rna_PDCD1', 'rna_IL2RB', 'rna_KLRB1', 'rna_CD69'),
-             ncol=3, with_dimplot=TRUE, group.by='integrated_snn_res.0.3')
-violin_plots(Tcells_0, c('rna_CCR7', 'rna_SELL', 'rna_IL2RB', 'rna_IL2RA', 'rna_CD69', 'rna_CREM'),
+violin_plots(Tcells_0, c('rna_CCR7', 'rna_SELL', 'rna_PASK', 'rna_IL2RA', 'rna_IL2RB', 'rna_IL17A', 'rna_ISG15', 'rna_IFI6', 'rna_MX1',
+                         'rna_KLRB1', 'rna_S100A4', 'rna_PTPRCAP', 'rna_PFN1', 'rna_GZMA'),
              ncol=3, with_dimplot=TRUE, group.by='integrated_snn_res.0.4')
 # 2.4. Resolution 0.4 will be chosen
 

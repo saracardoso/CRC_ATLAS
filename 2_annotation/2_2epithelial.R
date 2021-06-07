@@ -271,7 +271,8 @@ for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert
   patient_preds[patient_preds=='Loss'] = -1
   patient_preds = matrix(as.numeric(patient_preds),
                          ncol=ncol(patient_preds))
-  rownames(patient_preds) = rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' & epithelial_metadata$patient==patient]
+  #rownames(patient_preds) = gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
+  #                                                                         epithelial_metadata$patient==patient])
   cell_annotations = cell_annotation[gsub('-', '.', rownames(epithelial_metadata)[epithelial_metadata$state=='Tumor' &
                                                                                     epithelial_metadata$patient==patient])]
   message('- Performing heatmap')
@@ -284,9 +285,9 @@ for(patient in grep('N', unique(epithelial_metadata$patient), value=TRUE, invert
                                                  col = list(Annotation_1 = c('Normal'='grey', 'Putative Normal'='forestgreen',
                                                                              'Putative Tumour'='chocolate2')),
                                                  show_annotation_name=FALSE)
-  predictions_clusts_largeScale_allchrs[[patient]] = ComplexHeatmap::Heatmap(patient_preds[rownames(predictions_clusts[[patient]]@matrix),],
-                                                                             cluster_rows=FALSE,
-                                                                             #patient_preds, cluster_rows=TRUE,
+  predictions_clusts_largeScale_allchrs[[patient]] = ComplexHeatmap::Heatmap(#patient_preds[rownames(predictions_clusts[[patient]]@matrix),],
+                                                                             #cluster_rows=FALSE,
+                                                                             patient_preds, cluster_rows=TRUE,
                                                                              cluster_columns=FALSE, col=heatmap_colors_discrete,
                                                                              name='Heatmap Values', show_row_names=FALSE,
                                                                              show_column_names=FALSE, column_title = patient,
