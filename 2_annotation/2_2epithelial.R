@@ -394,11 +394,12 @@ invisible(gc())
 # 2.  Normal + Putative normal: Check how cells cluster together
 # 2.1. Normal and classified as normal:
 normal_clusters = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='integrated_snn_res.1', label=T,
-                                  label.size=3, pt.size=.2) + Seurat::NoLegend()
+                                  label.size=3, pt.size=.2) + ggplot2::theme_minimal() + Seurat::NoLegend()
 normal_cna = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='CNA_annotation', label=F,
-                             label.size=3, pt.size=.2, order='Putative Normal', cols=c('Normal'='grey', 'Putative Normal'='red'))
-normal_patients = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='patient', label=T,
-                                  label.size=3, pt.size=.2) + Seurat::NoLegend()
+                             label.size=3, pt.size=.2, order='Putative Normal', cols=c('Normal'='grey', 'Putative Normal'='red')) +
+  ggplot2::theme_minimal() + ggplot2::ggtitle('Putative normal cells highlighted') + Seurat::NoLegend() 
+normal_patients = Seurat::DimPlot(Epithelial_normal, reduction="umap", group.by='patient', label=T, label.size=3, pt.size=.2) +
+  ggplot2::theme_minimal() + ggplot2::ggtitle('Colored by Patient') + Seurat::NoLegend()
 (normal_cna | normal_patients)
 normal_clusters | normal_cna | normal_patients
 # 2.2. Check normal and putative normal distribution in clusters 21 and 29
