@@ -1,207 +1,242 @@
 project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
+source(paste(project_dir, 'utils/modified_plots.R', sep='/'))
 
 # Load subset of epithelial cells:
-Bcells = SeuratDisk::LoadH5Seurat('/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/Bcells.h5Seurat')
+Bcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '/2_annotation/results_Bcells/datasets/Bcells.h5Seurat', sep='/'))
 
 
-
-# -----
-# - Integrate epithelial cells
-# -----
-
-# Separate epithelial cells by dataset:
-Bcells = Seurat::SplitObject(Bcells, split.by='dataset')
-# SCTransform data:
-for(dts_name in names(Bcells)) {
-  Bcells[[dts_name]] <- Seurat::SCTransform(Bcells[[dts_name]], vars.to.regress = c('CC.Difference', 'percent.mitochondrial_RNA'))
-  gc()
-}
-gc()
-# Select integration features and prepare for integration:
-features = Seurat::SelectIntegrationFeatures(Bcells, nfeatures = 3000)
-Bcells = Seurat::PrepSCTIntegration(Bcells, anchor.features=features)
-# Find integration achors and integrate the data:
-anchors = Seurat::FindIntegrationAnchors(Bcells, normalization.method='SCT', anchor.features=features)
-gc()
-Bcells = Seurat::IntegrateData(anchorset=anchors, normalization.method="SCT")
-gc()
 
 
 
 # -----
-# - Prepare data to find clusters
+# - Find clusters
 # -----
 
-# Run PCA:
+
+# 1. Run PCA:
 Bcells = Seurat::RunPCA(Bcells, assay='integrated')
-# Find the number of PCs to use:
-#pct = Bcells[["pca"]]@stdev /sum(Bcells[["pca"]]@stdev) * 100
-#cumu = cumsum(pct)
-#co1 = which(cumu > 90 & pct < 5)[1]
-#co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
-#elbow = min(co1, co2) # 12
+invisible(gc())
+Seurat::DefaultAssay(Bcells)='integrated'
 
-#plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
-#ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
-#  ggplot2::geom_text() + 
-#  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
-#  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
-#  ggplot2::theme_bw()
+# 2. Choose number of PCs to use (where the elbow occurs):
+pct = Bcells[["pca"]]@stdev /sum(Bcells[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+# 2.1 Number of PCs to use
+elbow = min(co1, co2) # 10
+# 2.2. Visual representation of the PCs to use
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw()
+# 2.3. Heatmap of the first 12 PCs
+Seurat::DimHeatmap(Bcells, dims=1:12, cells=500, balanced=TRUE)
 
-#Seurat::DimHeatmap(Bcells, dims=1:15, cells=500, balanced=TRUE)
+
+# 3. Find clusters
+# 3.1. Determine the K-nearest neighbor graph
+Bcells = Seurat::FindNeighbors(Bcells, dims=1:elbow)
+# 3.2. Find clusters:
+Bcells = Seurat::FindClusters(Bcells, resolution=seq(0.1, 1, by=.1))
+# 3.3. UMAP:
+Bcells = Seurat::RunUMAP(Bcells, dims=1:elbow, reduction='pca')
+invisible(gc())
+
+# 4. Choose best resolution:
+library(ggraph)
+clust_tree = clustree::clustree(Bcells, prefix='integrated_snn_res.')
+clust_tree
+# 4.1. Visualize different resolutions (first resolution was chosen to be the best for now):
+clusters_01 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_04 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
+clusters_05 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.5', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.7', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_04) / (clusters_05 | clusters_07)) | clust_tree
+# 4.2. Plot Metrics
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(Bcells, metrics, ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.7')
+# 4.3. Plot metadata
+state = Seurat::DimPlot(Bcells, reduction="umap", group.by='state', label=FALSE, label.size=6) + Seurat::NoLegend()
+patients = Seurat::DimPlot(Bcells, reduction="umap", group.by='patient', label=FALSE, label.size=6, pt.size=.1) + Seurat::NoLegend()
+datasets = Seurat::DimPlot(Bcells, reduction="umap", group.by='dataset', label=FALSE, label.size=6, pt.size=.1) + Seurat::NoLegend()
+(clusters_07 | patients) / (state | datasets)
+# 4.2. Feature Plots:
+feature_plots(Bcells, c('rna_MZB1', 'rna_IL2RA', 'rna_MS4A1', 'rna_CD27', 'rna_IGHD'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.7')
+# 4.4. Resolution 0.7 is chosen
+
+# 5. Save object:
+SeuratDisk::SaveH5Seurat(Bcells, paste(project_dir, '2_annotation/results_Bcells/datasets/Bcells_clustered.h5Seurat', sep='/'))
+
+
 
 
 
 # -----
-# - Find Clusters
+# - Annotate Clusters
 # -----
 
-# Determine the K-nearest neighbor graph
-Bcells = Seurat::FindNeighbors(Bcells, dims=1:50)#dims=1:elbow)
 
-# Find clusters:
-Bcells = Seurat::FindClusters(Bcells, resolution=c(0.4, 0.6, 1))
-
-# UMAP:
-Bcells = Seurat::RunUMAP(Bcells, dims=1:50, reduction='pca')#dims=1:elbow, reduction='pca')
-
-# Save object with clusters:
-SeuratDisk::SaveH5Seurat(Bcells, paste(project_dir, '2_annotation/data/Bcells_integratedClusters.h5Seurat', sep='/'))
-
-
-
-# -----
-# - Visualize Clusters
-# -----
-
-# Cluster from the three resolutions:
-clusters_04 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6)
-clusters_06 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.6', label=TRUE, label.size=6)
-clusters_1 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.1', label=TRUE, label.size=6)
-(clusters_04 | clusters_06) / clusters_1
-
-# Choose resolution 0.6
-res = 'integrated_snn_res.0.6'
-
-# Metadata:
-state = Seurat::DimPlot(Bcells, reduction="umap", group.by='state', label=FALSE, label.size=6)
-patients = Seurat::DimPlot(Bcells, reduction="umap", group.by='patient', label=FALSE, label.size=6, pt.size=.1)
-datasets = Seurat::DimPlot(Bcells, reduction="umap", group.by='dataset', label=FALSE, label.size=6, pt.size=.1)
-(clusters_06 | patients) / (state | datasets)
-
-# Normal/ tumour/ healthy distribution across clusters:
-clusters = c()
-percs = c()
-fill = c()
-for(cluster in unique(as.character(Bcells@meta.data[,res]))){
-  x = table(Bcells$state[Bcells@meta.data[,res]==cluster])[c('Tumor', 'Normal', 'Healthy')]
-  x[is.na(x)] = 0
-  y = sum(x)
-  percs = c(percs, x/y)
-  fill = c(fill, c('Tumor', 'Normal', 'Healthy'))
-  clusters = c(clusters, rep(cluster, 3))
-}
-dist_nt = data.frame(percs=percs, fill=fill, clusters=clusters)
-dist_nt$clusters = factor(dist_nt$clusters,
-                          levels=as.character(0:(length(unique(Bcells@meta.data[,res]))-1)))
-dist_state = ggplot2::ggplot(dist_nt, mapping = ggplot2::aes(clusters, percs, fill=fill)) +
-  ggplot2::geom_bar(position='stack', stat='identity')
-dist_state
-
-# IGs expression:
+# 1. IGs expression:
 ighm = 'IGHM'
 ighd = 'IGHD'
 igha = grep('^IGHA', rownames(Bcells@assays$RNA@data), value=T)
 ighg = grep('^IGHG', rownames(Bcells@assays$RNA@data), value=T)
-clusters_06 | Seurat::FeaturePlot(Bcells, features=paste('rna', c(igha, ighd, ighg, ighm), sep='_'), min.cutoff = 'q1')
-clusters_06 / Seurat::VlnPlot(Bcells, features=paste('rna', c(igha, ighd, ighg, ighm), sep='_'), ncol=5, pt.size=0, y.max=10, group.by=res)
+feature_plots(Bcells, features=paste('rna', c(igha, ighd, ighg, ighm), sep='_'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.7')
+violin_plots(Bcells, features=paste('rna', c(igha, ighd, ighg, ighm), sep='_'),
+             ncol=3, with_dimplot=TRUE, group.by='integrated_snn_res.0.7')
 
-# Kappa vs lamda expression:
+
+# 2. Kappa vs lamda expression:
 kappa = grep('^IGK', rownames(Bcells@assays$RNA@data), value=T)
-kappa_expression = colSums(Seurat::GetAssayData(Bcells, assay='RNA', slot='data')[kappa,])
+kappa_expression = Matrix::colSums(Seurat::GetAssayData(Bcells, assay='RNA', slot='data')[kappa,])
 Bcells[['kappa_expression']] = kappa_expression
 lambda = grep('^IGL', rownames(Bcells@assays$RNA@data), value=T)
-lambda_expression = colSums(Seurat::GetAssayData(Bcells, assay='RNA', slot='data')[lambda[2:44],])
+lambda_expression = Matrix::colSums(Seurat::GetAssayData(Bcells, assay='RNA', slot='data')[lambda[2:44],])
 Bcells[['lambda_expression']] = lambda_expression
-clusters_06 | Seurat::FeaturePlot(Bcells, features=c('kappa_expression', 'lambda_expression'), ncol=1)
-clusters_06 | Seurat::VlnPlot(Bcells, features=c('kappa_expression', 'lambda_expression'), ncol=1, pt.size=0, y.max=40, group.by=res)
-
-# Memory vs activated vs plasma vs naive
-clusters_06 / ( Seurat::FeaturePlot(Bcells, features=c('rna_MZB1', 'rna_IL2RA', 'rna_MS4A1', 'rna_CD27'), ncol=2) |
-                  Seurat::VlnPlot(Bcells, features=c('rna_MZB1', 'rna_IL2RA', 'rna_MS4A1', 'rna_CD27'), ncol=2, pt.size=0, group.by=res))
-
-clusters_06 / ( Seurat::FeaturePlot(Bcells, features=c('rna_MZB1', 'rna_CXCR4', 'rna_SDC1', 'rna_NR4A2'), ncol=2) |
-                  Seurat::VlnPlot(Bcells, features=c('rna_MZB1', 'rna_CXCR4', 'rna_SDC1', 'rna_NR4A2'), ncol=2, pt.size=0, group.by=res))
+feature_plots(Bcells, features=c('kappa_expression', 'lambda_expression'), ncol=2, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.7')
+violin_plots(Bcells, features=c('kappa_expression', 'lambda_expression'), ncol=2, with_dimplot=TRUE, group.by='integrated_snn_res.0.7')
 
 
+# 3. Memory vs activated vs plasma vs naive
+feature_plots(Bcells, features=c('rna_MZB1', 'rna_MS4A1', 'rna_CD27', 'rna_CXCR4', 'rna_NR4A2', 'rna_RGS13'),
+              ncol=4, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.7')
+violin_plots(Bcells, features=c('rna_MZB1', 'rna_MS4A1', 'rna_CD27', 'rna_CXCR4', 'rna_NR4A2', 'rna_RGS13'),
+             ncol=4, with_dimplot=TRUE, group.by='integrated_snn_res.0.7')
 
 
-# -----
-# - Calculate similarity between clusters
-# -----
-
-# Calculate average and median expression profiles of each cluster:
-n_genes = dim(Bcells@assays$RNA@data)[1]
-n_clusters = length(unique(Bcells@meta.data[,res]))
-average_profiles = matrix(rep(0, n_genes * n_clusters), nrow = n_genes)
-colnames(average_profiles) = as.character(c(0:(n_clusters-1)))
-rownames(average_profiles) = rownames(Bcells@assays$RNA@data)
-for(clust in as.character(c(0:(n_clusters-1)))){
-  message('Cluster:', clust)
-  clust_cells = rownames(Bcells@meta.data)[Bcells@meta.data[,res] == clust]
-  clust_matrix = as.matrix(Bcells@assays$RNA@data[,clust_cells])
-  average_profiles[,clust] = rowMeans(clust_matrix)
-  invisible(gc())
-}
-
-# Calculate distance matrices between clusters:
-dist_average_clusts = dist(t(average_profiles), method='euclidean')
-
-# Visualize distance matrices:
-dist_average_clusts_matrix = as.matrix(dist_average_clusts)
+# 4. Calculate similarity between clusters
+# 4.1. Calculate average expression profiles of each cluster:
+Bcells_average_profiles = Seurat::AverageExpression(Bcells, group.by = 'integrated_snn_res.0.7', assays='RNA', slor='data')$RNA
+# 4.2. Calculate distance matrices between clusters:
+Bcells_dist_average_clusts = dist(t(Bcells_average_profiles), method='euclidean')
+# 4.3. Visualize distance matrices:
+dist_average_clusts_matrix = as.matrix(Bcells_dist_average_clusts)
 #dist_average_clusts_matrix[upper.tri(dist_average_clusts_matrix)] <- NA
 pheatmap::pheatmap(dist_average_clusts_matrix, cluster_rows=F, cluster_cols=F, na_col="white", display_numbers=TRUE,
-                  main='Clusters distance based on average profiles')
-
-# Create dendogram:
-hclust_average_clusters = hclust(dist_average_clusts, method='complete')
+                   main='Clusters distance based on average profiles')
+# 4.4. Create dendogram:
+hclust_average_clusters = hclust(Bcells_dist_average_clusts, method='complete')
 plot(hclust_average_clusters, main='Clustering based on average profiles')
 
 
-
-
-# -----
-# - Find markers
-# -----
-
-Seurat::Idents(Bcells) = res
-Bcells_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.8, only.pos=TRUE)
+# 5. Find markers
+# 5.1. Calculate all markers
+Seurat::Idents(Bcells) = 'integrated_snn_res.0.7'
+Bcells_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.5, only.pos=TRUE)
 View(Bcells_markers)
-write.csv(Bcells_markers, paste(project_dir, '2_annotation/markers/Bcells/Bcells_res06.csv', sep='/'))
-
-# Get top 20 markers for each cluster:
-Bcells_markers_top20 = dplyr::top_n(dplyr::group_by(Bcells_markers[Bcells_markers$p_val_adj<0.05,], cluster), n=20, wt=avg_log2FC)
+write.csv(Bcells_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_res07.csv', sep='/'))
+# 5.2. Get top 20 markers for each sub-cluster
+Bcells_markers_top20 = c()
+for(clust in as.character(unique(Bcells_markers$cluster))){
+  clust_markers = Bcells_markers[Bcells_markers$cluster==clust,]
+  n_markers = dim(clust_markers)[1]
+  order_by_avg_log2FC = order(clust_markers$avg_log2FC, decreasing=T)
+  if(n_markers > 20) top20_clust_markers = clust_markers[order_by_avg_log2FC[1:20],]
+  else top20_clust_markers = clust_markers[order_by_avg_log2FC,]
+  Bcells_markers_top20 = rbind(Bcells_markers_top20, top20_clust_markers)
+}
 View(Bcells_markers_top20)
-write.csv(Bcells_markers_top20, paste(project_dir, '2_annotation/markers/Bcells/Bcells_res06_top20.csv', sep='/'))
+write.csv(Bcells_markers_top20, paste(project_dir, '2_annotation/results_Bcells/markers/markers_res07_top20.csv', sep='/'))
 
-# Merge clusters together, based on previous markers and similarity measures:
-Bcells[['temp_clusters']] = as.character(Bcells@meta.data[,res])
-Bcells$temp_clusters[Bcells$temp_clusters%in%c('0', '2')] = '0_2'
-Bcells$temp_clusters[Bcells$temp_clusters%in%c('1', '16')] = '1_16'
-Bcells$temp_clusters[Bcells$temp_clusters%in%c('4', '13')] = '4_13'
-Bcells$temp_clusters[Bcells$temp_clusters%in%c('3', '5', '6', '8')] = '3_5_6_8'
-Bcells$temp_clusters[Bcells$temp_clusters%in%c('9', '10')] = '9_10'
-Bcells$temp_clusters[Bcells$temp_clusters%in%c('11', '17')] = '11_17'
-Seurat::DimPlot(Bcells, reduction="umap", group.by=res, label=TRUE, label.size=6) |
+
+# 6. The following clusters will be merged, based on previous markers and similarity measures, and new markers calculated:
+# 10 + 11
+# 3 + 4 + 6 + 8 + 15
+# 2 + 12 + 13
+# 0 + 1 + 5 + 7 + 14
+# 6.1. Merge Clusters:
+Bcells[['temp_clusters']] = as.character(Bcells@meta.data[,'integrated_snn_res.0.7'])
+Bcells$temp_clusters[Bcells$temp_clusters%in%c('0', '1', '5', '7', '14')] = '0_1_5_7_14'
+Bcells$temp_clusters[Bcells$temp_clusters%in%c('2', '12', '13')] = '2_12_14'
+Bcells$temp_clusters[Bcells$temp_clusters%in%c('3', '4', '6', '8', '15')] = '3_4_6_8_15'
+Bcells$temp_clusters[Bcells$temp_clusters%in%c('10', '11')] = '10_11'
+Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.7', label=TRUE, label.size=6) |
   Seurat::DimPlot(Bcells, reduction="umap", group.by='temp_clusters', label=TRUE, label.size=6)
-
-# Calculate markers for new clusters:
+# 6.3. Calculate markers for new clusters:
 Seurat::Idents(Bcells) = 'temp_clusters'
 Bcells_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.8, only.pos=TRUE)
 View(Bcells_markers)
-write.csv(Bcells_markers, paste(project_dir, '2_annotation/markers/Bcells/Bcells_tempclusters.csv', sep='/'))
-
-# Get top 20 markers for each cluster:
+write.csv(Bcells_markers, paste(project_dir, '2_annotation/markers/Bcells/markers_tempclusters.csv', sep='/'))
+# 6.4. Get top 20 markers for each cluster:
 Bcells_markers_top20 = dplyr::top_n(dplyr::group_by(Bcells_markers[Bcells_markers$p_val_adj<0.05,], cluster), n=20, wt=avg_log2FC)
 View(Bcells_markers_top20)
-write.csv(Bcells_markers_top20, paste(project_dir, '2_annotation/markers/Bcells/Bcells_tempclusters_top20.csv', sep='/'))
+write.csv(Bcells_markers_top20, paste(project_dir, '2_annotation/results_Bcells/markers/markers_tempclusters_top20.csv', sep='/'))
+
+
+# 7. Final feature plots
+# 7.1. Ig expression
+feature_plots(Bcells, features=paste('rna', c(igha, ighd, ighg, ighm), sep='_'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='temp_clusters')
+# 7.2.  Memory vs plasma vs naive
+feature_plots(Bcells, features=c('rna_MZB1', 'rna_MS4A1', 'rna_CD27', 'rna_CXCR4', 'rna_NR4A2'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='temp_clusters')
+# 7.3. Proliferative B cells
+feature_plots(Bcells, c('rna_STMN1', 'rna_ACTB', 'rna_RGS13', 'rna_MKI67', 'rna_PCNA', 'rna_MARCKSL1', 'rna_HMGN1', 'rna_HMGN2'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='temp_clusters')
+
+
+# 8. Final violin plots
+violin_plots(Bcells, features=c(paste('rna', c(igha, ighd, ighg, ighm), sep='_'),
+                                'rna_MZB1', 'rna_MS4A1', 'rna_CD27', 'rna_CXCR4', 'rna_NR4A2',
+                                'rna_STMN1', 'rna_ACTB', 'rna_RGS13', 'rna_MKI67', 'rna_PCNA', 'rna_MARCKSL1', 'rna_HMGN1', 'rna_HMGN2'),
+             ncol=5, with_dimplot=TRUE, group.by='temp_clusters')
+
+
+# 9. Annotate cells:
+# Sub-clusters 0 + 1 + 5 + 7 + 14  --> Memory Bcells
+# Sub-clusters 2 + 12 + 14         --> Naive Bcells
+# Sub-clusters 3 + 4 + 6 + 8 + 15  --> IgA+ Plasma cells 1
+# Sub-cluster  9                   --> IgG+ Plasma cells
+# Sub-clusters 10 + 11             --> Proliferative Bcells
+# Sub-cluster  16                  --> IgA+ Plasma cells 2 
+# 9.1. Annotation level 2:
+Bcells[['Annotation_Level_2']] = rep('', length(Bcells$temp_clusters))
+memory_cells = rownames(Bcells@meta.data)[Bcells$temp_clusters=='0_1_5_7_14']
+Bcells@meta.data[memory_cells, 'Annotation_Level_2'] = 'Memory Bcells'
+naive_cells = rownames(Bcells@meta.data)[Bcells$temp_clusters=='2_12_14']
+Bcells@meta.data[naive_cells, 'Annotation_Level_2'] = 'Naive Bcells'
+iga1_cells = rownames(Bcells@meta.data)[Bcells$temp_clusters=='3_4_6_8_15']
+Bcells@meta.data[iga1_cells, 'Annotation_Level_2'] = 'IgA+ Plasma cells 1'
+igg_cells = rownames(Bcells@meta.data)[Bcells$temp_clusters=='9']
+Bcells@meta.data[igg_cells, 'Annotation_Level_2'] = 'IgG+ Plasma cells'
+prol_cells = rownames(Bcells@meta.data)[Bcells$temp_clusters=='10_11']
+Bcells@meta.data[prol_cells, 'Annotation_Level_2'] = 'Proliferative Bcells'
+iga2_cells = rownames(Bcells@meta.data)[Bcells$temp_clusters=='16']
+Bcells@meta.data[iga2_cells, 'Annotation_Level_2'] = 'IgA+ Plasma cells 2'
+# 9.2. Annotation level 1:
+Bcells[['Annotation_Level_1']] = as.character(Bcells$Annotation_Level_2)
+Bcells@meta.data[Bcells$Annotation_Level_2%in%c('IgA+ Plasma cells 1', 'IgA+ Plasma cells 2'), 'Annotation_Level_1'] = 'IgA+ Plasma cells'
+# 9.3. Annotation level 0:
+Bcells[['Annotation_Level_0']] = factor(rep('Bcells', dim(Bcells@meta.data)[1]))
+# 9.4. Remove [integrated...] metadata variables
+Bcells@meta.data = Bcells@meta.data[, !colnames(Bcells@meta.data) %in%
+                                      c(grep('^in', colnames(Bcells@meta.data), value=T), 'seurat_clusters')]
+# 9.5. Visualize annotations:
+Seurat::DimPlot(Bcells, reduction="umap", group.by='Annotation_Level_2', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Bcells, reduction="umap", group.by='Annotation_Level_1', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+# 9.6. Save Seurat object
+SeuratDisk::SaveH5Seurat(Bcells, paste(project_dir, '2_annotation/results_Bcells/datasets/Bcells_finalAnnots.h5Seurat', sep='/'))
+
+
+# 10. Get Markers between the final annotations:
+# 10.1. Annotation Level 2
+Seurat::Idents(Bcells) = 'Annotation_Level_2'
+Bcells_Level_2_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+View(Bcells_Level_2_markers)
+write.csv(Bcells_Level_2_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_Level_2.csv', sep='/'))
+invisible(gc())
+# 10.1. Annotation Level 1
+Seurat::Idents(Bcells) = 'Annotation_Level_1'
+Bcells_Level_1_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+View(Bcells_Level_1_markers)
+write.csv(Bcells_Level_1_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_Level_1.csv', sep='/'))
+invisible(gc())
+
+
