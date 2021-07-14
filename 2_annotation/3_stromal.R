@@ -1,100 +1,75 @@
 project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
+source(paste(project_dir, 'utils/modified_plots.R', sep='/'))
 
 # Load subset of epithelial cells:
-Stromal = SeuratDisk::LoadH5Seurat('/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/stromal_cells.h5Seurat')
+Stromal = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Stromal/datasets/stromal_cells.h5Seurat', sep='/'))
 
 
-
-# -----
-# - Integrate epithelial cells
-# -----
-
-# Separate epithelial cells by dataset:
-Stromal = Seurat::SplitObject(Stromal, split.by='dataset')
-# SCTransform data:
-for(dts_name in names(Stromal)) {
-  Stromal[[dts_name]] <- Seurat::SCTransform(Stromal[[dts_name]], vars.to.regress = c('CC.Difference', 'percent.mitochondrial_RNA'))
-  gc()
-}
-gc()
-# Select integration features and prepare for integration:
-features = Seurat::SelectIntegrationFeatures(Stromal, nfeatures = 3000)
-Stromal = Seurat::PrepSCTIntegration(Stromal, anchor.features=features)
-# Find integration achors and integrate the data:
-anchors = Seurat::FindIntegrationAnchors(Stromal, normalization.method='SCT', anchor.features=features)
-gc()
-Stromal = Seurat::IntegrateData(anchorset=anchors, normalization.method="SCT")
-gc()
 
 
 
 # -----
-# - Prepare data to find clusters
+# - Find clusters
 # -----
 
-# Run PCA:
+
+# 1. Run PCA:
 Stromal = Seurat::RunPCA(Stromal, assay='integrated')
-# Find the number of PCs to use:
-#pct = Stromal[["pca"]]@stdev /sum(Stromal[["pca"]]@stdev) * 100
-#cumu = cumsum(pct)
-#co1 = which(cumu > 90 & pct < 5)[1]
-#co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
-#elbow = min(co1, co2) # 20
+invisible(gc())
+Seurat::DefaultAssay(Stromal)='integrated'
 
-#plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
-#ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
-#  ggplot2::geom_text() + 
-#  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
-#  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
-#  ggplot2::theme_bw()
-
-#Seurat::DimHeatmap(Stromal, dims=1:21, cells=500, balanced=TRUE)
-
-
-
-# -----
-# - Find Clusters
-# -----
-
-# Determine the K-nearest neighbor graph
-Stromal = Seurat::FindNeighbors(Stromal, dims=1:50)#dims=1:elbow)
-
-# Find clusters:
-Stromal = Seurat::FindClusters(Stromal, resolution=c(0.4, 0.6, 1))
-
-# UMAP:
-Stromal = Seurat::RunUMAP(Stromal, dims=1:50, reduction='pca')#dims=1:elbow, reduction='pca')
-
-# Save object with clusters:
-SeuratDisk::SaveH5Seurat(Stromal, paste(project_dir, '2_annotation/data/Stromal_integratedClusters.h5Seurat', sep='/'))
+# 2. Choose number of PCs to use (where the elbow occurs):
+pct = Stromal[["pca"]]@stdev /sum(Stromal[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+# 2.1 Number of PCs to use
+elbow = min(co1, co2) # 14
+# 2.2. Visual representation of the PCs to use
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw()
+# 2.3. Heatmap of the first 15 PCs
+Seurat::DimHeatmap(Stromal, dims=1:15, cells=500, balanced=TRUE)
 
 
+# 3. Find clusters
+# 3.1. Determine the K-nearest neighbor graph
+Stromal = Seurat::FindNeighbors(Stromal, dims=1:elbow)
+# 3.2. Find clusters:
+Stromal = Seurat::FindClusters(Stromal, resolution=seq(0.1, 1, by=.1))
+# 3.3. UMAP:
+Stromal = Seurat::RunUMAP(Stromal, dims=1:elbow, reduction='pca')
+invisible(gc())
 
-# -----
-# - Visualize Clusters
-# -----
 
-# Cluster from the three resolutions:
-clusters_04 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6)
-clusters_06 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.6', label=TRUE, label.size=6)
-clusters_1 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.1', label=TRUE, label.size=6)
-(clusters_04 | clusters_06) / (clusters_1 | ggplot2::ggplot())
-
-# Choose resolution 0.6
-res = 'integrated_snn_res.0.6'
-
-# Metadata:
-state = Seurat::DimPlot(Stromal, reduction="umap", group.by='state', label=FALSE, label.size=6)
-patients = Seurat::DimPlot(Stromal, reduction="umap", group.by='patient', label=FALSE, label.size=6, pt.size=.1)
-datasets = Seurat::DimPlot(Stromal, reduction="umap", group.by='dataset', label=FALSE, label.size=6, pt.size=.1)
-(clusters_06 | patients) / (state | datasets)
-
-# Normal/ tumour/ healthy distribution across clusters:
+# 4. Choose best resolution:
+library(ggraph)
+clust_tree = clustree::clustree(Stromal, prefix='integrated_snn_res.')
+clust_tree
+# 4.1. Visualize different resolutions (first resolution was chosen to be the best for now):
+clusters_01 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_03 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.3', label=TRUE, label.size=6, pt.size=.2)
+clusters_05 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.5', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.7', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_03) / (clusters_05 | clusters_07)) | clust_tree
+# 4.2. Plot Metrics
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(Stromal, metrics, ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5')
+# 4.3. Plot metadata
+state = Seurat::DimPlot(Stromal, reduction="umap", group.by='state', label=FALSE, label.size=6) + Seurat::NoLegend()
+patients = Seurat::DimPlot(Stromal, reduction="umap", group.by='patient', label=FALSE, label.size=6, pt.size=.1) + Seurat::NoLegend()
+datasets = Seurat::DimPlot(Stromal, reduction="umap", group.by='dataset', label=FALSE, label.size=6, pt.size=.1) + Seurat::NoLegend()
+(clusters_05 | patients) / (state | datasets)
+# 4.4. Normal/ tumour/ healthy distribution across clusters:
 clusters = c()
 percs = c()
 fill = c()
-for(cluster in unique(as.character(Stromal@meta.data[,res]))){
-  x = table(Stromal$state[Stromal@meta.data[,res]==cluster])[c('Tumor', 'Normal', 'Healthy')]
+for(cluster in unique(as.character(Stromal@meta.data[,'integrated_snn_res.0.5']))){
+  x = table(Stromal$state[Stromal@meta.data[,'integrated_snn_res.0.5']==cluster])[c('Tumor', 'Normal', 'Healthy')]
   x[is.na(x)] = 0
   y = sum(x)
   percs = c(percs, x/y)
@@ -103,169 +78,165 @@ for(cluster in unique(as.character(Stromal@meta.data[,res]))){
 }
 dist_nt = data.frame(percs=percs, fill=fill, clusters=clusters)
 dist_nt$clusters = factor(dist_nt$clusters,
-                          levels=as.character(0:(length(unique(Stromal@meta.data[,res]))-1)))
+                          levels=as.character(0:(length(unique(Stromal@meta.data[,'integrated_snn_res.0.5']))-1)))
 dist_state = ggplot2::ggplot(dist_nt, mapping = ggplot2::aes(clusters, percs, fill=fill)) +
   ggplot2::geom_bar(position='stack', stat='identity')
 dist_state
+# 4.5. Feature Plots:
+feature_plots(Stromal, c('rna_VWF', 'rna_PLVAP', 'rna_CDH5', 'rna_ENG', 'rna_LYVE1', 'rna_PROX1'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5') # Vascular and lymphatic endothelial cells
+feature_plots(Stromal, c('rna_PLP1', 'rna_S100B'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5') # Enteric glia cells
+feature_plots(Stromal, c('rna_SYNPO2', 'rna_CNN1', 'rna_PDGFRB', 'rna_RGS5', 'rna_ABCC9', 'rna_KCNJ8'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5') # VSMCs + pericytes
+feature_plots(Stromal, c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5') # fibroblasts
+# 4.6. Resolution 0.5 is chosen
 
-# Expression markers - endothelial cells:
-featurePlot_ec = Seurat::FeaturePlot(Stromal, features=c('rna_VWF', 'rna_PLVAP', 'rna_CDH5', 'rna_ENG'), min.cutoff = 'q1')
-vlnPlot_ec = Seurat::VlnPlot(Stromal, features=c('rna_VWF', 'rna_PLVAP', 'rna_CDH5', 'rna_ENG'),
-                                 pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_ec / vlnPlot_ec )
+# 5. Save object:
+SeuratDisk::SaveH5Seurat(Stromal, paste(project_dir, '2_annotation/results_Stromal/datasets/Stromal_clustered.h5Seurat', sep='/'))
 
-# Expression markers - lymphatic endothelial cells:
-featurePlot_ec = Seurat::FeaturePlot(Stromal, features=c('rna_LYVE1', 'rna_PROX1'), min.cutoff = 'q1')
-vlnPlot_ec = Seurat::VlnPlot(Stromal, features=c('rna_LYVE1', 'rna_PROX1'),
-                             pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_ec / vlnPlot_ec )
-
-# Expression markers - enteric glia:
-featurePlot_eg = Seurat::FeaturePlot(Stromal, features=c('rna_SOX10', 'rna_S100B'), min.cutoff = 'q1')
-vlnPlot_eg = Seurat::VlnPlot(Stromal, features=c('rna_SOX10', 'rna_S100B'),
-                             pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_eg / vlnPlot_eg )
-
-# Expression markers - VSMC (vascular smooth muscle cells):
-featurePlot_vsmc = Seurat::FeaturePlot(Stromal, features=c('rna_SYNPO2', 'rna_CRYAB', 'rna_CNN1', 'rna_DES'), min.cutoff = 'q1')
-vlnPlot_vsmc = Seurat::VlnPlot(Stromal, features=c('rna_SYNPO2', 'rna_CRYAB', 'rna_CNN1', 'rna_DES'),
-                             pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_vsmc / vlnPlot_vsmc )
-
-# Expression markers - pericytes
-featurePlot_p = Seurat::FeaturePlot(Stromal, features=c('rna_RGS5', 'rna_CSPG4', 'rna_ABCC9', 'rna_KCNJ8'), min.cutoff = 'q1')
-vlnPlot_p = Seurat::VlnPlot(Stromal, features=c('rna_RGS5', 'rna_CSPG4', 'rna_ABCC9', 'rna_KCNJ8'),
-                               pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_p / vlnPlot_p )
-
-# Expression markers - fibroblasts
-featurePlot_f = Seurat::FeaturePlot(Stromal, features=c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN'),
-                                    min.cutoff = 'q1')
-vlnPlot_f = Seurat::VlnPlot(Stromal, features=c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN'),
-                            pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_f / vlnPlot_f )
-
-# Expression markers - myofibroblasts
-featurePlot_mf = Seurat::FeaturePlot(Stromal, features=c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK'),
-                                    min.cutoff = 'q1')
-vlnPlot_mf = Seurat::VlnPlot(Stromal, features=c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK'),
-                            pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_mf / vlnPlot_mf )
-
-# Expression markers - CAFs
-featurePlot_caf = Seurat::FeaturePlot(Stromal, features=c('rna_THY1', 'rna_FAP'), ncol=2)
-vlnPlot_caf = Seurat::VlnPlot(Stromal, features=c('rna_THY1', 'rna_FAP'), pt.size = 0, ncol=2, group.by = res)
-clusters_06 | ( featurePlot_caf / vlnPlot_caf )
 
 
 
 
 # -----
-# - Calculate similarity between clusters
+# - Annotate Clusters
 # -----
 
-# Calculate average and median expression profiles of each cluster:
-n_genes = dim(Stromal@assays$RNA@data)[1]
-n_clusters = length(unique(Stromal@meta.data[,res]))
-average_profiles = matrix(rep(0, n_genes * n_clusters), nrow = n_genes)
-colnames(average_profiles) = as.character(c(0:(n_clusters-1)))
-rownames(average_profiles) = rownames(Stromal@assays$RNA@data)
-for(clust in as.character(c(0:(n_clusters-1)))){
-  message('Cluster:', clust)
-  clust_cells = rownames(Stromal@meta.data)[Stromal@meta.data[,res] == clust]
-  clust_matrix = as.matrix(Stromal@assays$RNA@data[,clust_cells])
-  average_profiles[,clust] = rowMeans(clust_matrix)
-  invisible(gc())
-}
+# 1. Assess markers
+# 1.1. Vascular (stalk- and tip- like) and lymphatic endothelial cells
+feature_plots(Stromal, c('rna_VWF', 'rna_PLVAP', 'rna_CDH5', 'rna_ENG',
+                         'rna_LYVE1', 'rna_PROX1',
+                         'rna_ACKR1', 'rna_SELP',
+                         'rna_RGCC', 'rna_RAMP3'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5')
+violin_plots(Stromal, c('rna_VWF', 'rna_PLVAP', 'rna_CDH5', 'rna_ENG',
+                         'rna_LYVE1', 'rna_PROX1',
+                         'rna_ACKR1', 'rna_SELP',
+                         'rna_RGCC', 'rna_RAMP3'),
+              ncol=4, with_dimplot=TRUE, group.by='integrated_snn_res.0.5')
 
-# Calculate distance matrices between clusters:
-dist_average_clusts = dist(t(average_profiles), method='euclidean')
+# 1.2. Enteric glia cells
+feature_plots(Stromal, c('rna_PLP1', 'rna_S100B'), ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5')
+violin_plots(Stromal, c('rna_PLP1', 'rna_S100B'), ncol=3, with_dimplot=TRUE, group.by='integrated_snn_res.0.5')
 
-# Visualize distance matrices:
-dist_average_clusts_matrix = as.matrix(dist_average_clusts)
-#dist_average_clusts_matrix[upper.tri(dist_average_clusts_matrix)] <- NA
-pheatmap::pheatmap(dist_average_clusts_matrix, cluster_rows=F, cluster_cols=F, na_col="white", display_numbers=TRUE,
-                   main='Clusters distance based on average profiles')
+# 1.3. VSMCs + Pericytes
+feature_plots(Stromal, c('rna_SYNPO2', 'rna_CNN1', 'rna_PDGFRB',
+                         'rna_RGS5', 'rna_ABCC9', 'rna_KCNJ8'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5')
+violin_plots(Stromal, c('rna_SYNPO2', 'rna_CNN1', 'rna_PDGFRB',
+                         'rna_RGS5', 'rna_ABCC9', 'rna_KCNJ8'),
+              ncol=4, with_dimplot=TRUE, group.by='integrated_snn_res.0.5')
 
-# Create dendogram:
-hclust_average_clusters = hclust(dist_average_clusts, method='complete')
-plot(hclust_average_clusters, main='Clustering based on average profiles')
+# 1.4. Myofibroblasts
+feature_plots(Stromal, c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK', 'rna_DES'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5')
+violin_plots(Stromal, c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK', 'rna_DES'),
+             ncol=4, with_dimplot=TRUE, group.by='integrated_snn_res.0.5')
 
-
-
-
-# -----
-# - CAFs vs Fibroblasts
-# -----
-
-Stromal[['state2']] = as.character(Stromal@meta.data[,'state'])
-Stromal$state2[Stromal$state2=='Healthy'] = 'Normal'
-
-Stromal[['temp_clusters0']] = as.character(Stromal@meta.data[,res])
-Stromal$temp_clusters0[Stromal$temp_clusters0=='1'] = paste(Stromal$temp_clusters0[Stromal$temp_clusters0=='1'],
-                                                            Stromal$state2[Stromal$temp_clusters0=='1'], sep='_')
-Stromal$temp_clusters0[Stromal$temp_clusters0=='14'] = paste(Stromal$temp_clusters0[Stromal$temp_clusters0=='14'],
-                                                             Stromal$state2[Stromal$temp_clusters0=='14'], sep='_')
-
-Seurat::VlnPlot(subset(Stromal, cells=rownames(Stromal@meta.data)[!Stromal$integrated_snn_res.0.6%in%c('5', '6', '7', '8', '9', '13', '16',
-                                                                                                       '17', '18', '21')]),
-                features=c('rna_THY1', 'rna_FAP'), pt.size = 0, ncol=1, group.by = 'temp_clusters0')
-
-# Calculate average expression profiles of each cluster:
-clusts = unique(Stromal$temp_clusters0)
-n_genes = dim(Stromal@assays$RNA@data)[1]
-n_clusters = length(clusts)
-average_profiles = matrix(rep(0, n_genes * n_clusters), nrow = n_genes)
-colnames(average_profiles) = clusts
-rownames(average_profiles) = rownames(Stromal@assays$RNA@data)
-for(clust in clusts){
-  clust_cells = rownames(Stromal@meta.data)[Stromal@meta.data[,'temp_clusters0'] == clust]
-  clust_matrix = as.matrix(Stromal@assays$RNA@data[,clust_cells])
-  average_profiles[,clust] = rowMeans(clust_matrix)
-  invisible(gc())
-}
-
-# Calculate distance matrices between clusters:
-dist_average_clusts = dist(t(average_profiles), method='euclidean')
-
-# Visualize distance matrices:
-dist_average_clusts_matrix = as.matrix(dist_average_clusts)
-pheatmap::pheatmap(dist_average_clusts_matrix, cluster_rows=F, cluster_cols=F, na_col="white", display_numbers=TRUE,
-                   main='Clusters distance based on average profiles')
+# 1.5. Fibroblasts + CAFs
+feature_plots(Stromal, c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN',
+                         'rna_THY1', 'rna_FAP'),
+              ncol=3, with_dimplot=TRUE, dimplot_group='integrated_snn_res.0.5')
+violin_plots(Stromal, c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN',
+                         'rna_THY1', 'rna_FAP'),
+              ncol=3, with_dimplot=TRUE, group.by='integrated_snn_res.0.5')
 
 
+# 2. Annotate cells:
+# Sub-cluster  0           --> Fibroblasts_1
+# Sub-cluster  1 + 10      --> CAFs_1
+# Sub-cluster  2           --> Fibroblasts_2
+# Sub-cluster  3           --> Fibroblasts_3
+# Sub-cluster  4           --> Fibroblasts_4
+# Sub-cluster  5           --> Pericytes
+# Sub-clusters 6 + 8 + 15  --> Tip-like vascular ECs
+# Sub-cluster  7           --> Stalk-like vascular ECs
+# Sub-cluster  9           --> Enteric glia cells
+# Sub-cluster  11          --> VSMCs
+# Sub-cluster  12          --> CAFs_2
+# Sub-cluster  13          --> Myofibroblasts
+# Sub-cluster  14          --> Lymphatic ECs
+
+# 2.1. Annotation level 3:
+Stromal[['Annotation_Level_3']] = rep('', length(Stromal$integrated_snn_res.0.5))
+fib1_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='0']
+Stromal@meta.data[fib1_cells, 'Annotation_Level_3'] = 'Fibroblasts_1'
+cafs1_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5%in%c('1', '10')]
+Stromal@meta.data[cafs1_cells, 'Annotation_Level_3'] = 'CAFs_1'
+fib2_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='2']
+Stromal@meta.data[fib2_cells, 'Annotation_Level_3'] = 'Fibroblasts_2'
+fib3_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='3']
+Stromal@meta.data[fib3_cells, 'Annotation_Level_3'] = 'Fibroblasts_3'
+fib4_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='4']
+Stromal@meta.data[fib4_cells, 'Annotation_Level_3'] = 'Fibroblasts_4'
+pericytes_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='5']
+Stromal@meta.data[pericytes_cells, 'Annotation_Level_3'] = 'Pericytes'
+tip_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5%in%c('6', '8', '15')]
+Stromal@meta.data[tip_cells, 'Annotation_Level_3'] = 'Tip-like vascular ECs'
+stalk_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='7']
+Stromal@meta.data[stalk_cells, 'Annotation_Level_3'] = 'Stalk-like vascular ECs'
+enteric_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='9']
+Stromal@meta.data[enteric_cells, 'Annotation_Level_3'] = 'Enteric glia cells'
+vsmcs_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='11']
+Stromal@meta.data[vsmcs_cells, 'Annotation_Level_3'] = 'VSMCs'
+cafs2_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='12']
+Stromal@meta.data[cafs2_cells, 'Annotation_Level_3'] = 'CAFs_2'
+myofibroblasts_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='13']
+Stromal@meta.data[myofibroblasts_cells, 'Annotation_Level_3'] = 'Myofibroblasts'
+lymphatic_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='14']
+Stromal@meta.data[lymphatic_cells, 'Annotation_Level_3'] = 'Lymphatic ECs'
+
+# 2.2. Annotation level 1:
+Stromal[['Annotation_Level_2']] = as.character(Stromal$Annotation_Level_3)
+Stromal@meta.data[Stromal$Annotation_Level_3%in%c('Fibroblasts_1', 'Fibroblasts_2', 'Fibroblasts_3', 'Fibroblasts_4'),
+                  'Annotation_Level_2'] = 'Fibroblasts'
+Stromal@meta.data[Stromal$Annotation_Level_3%in%c('CAFs_1', 'CAFs_2'), 'Annotation_Level_2'] = 'CAFs'
+
+# 2.3. Annotation level 1:
+Stromal[['Annotation_Level_1']] = as.character(Stromal$Annotation_Level_2)
+Stromal@meta.data[Stromal$Annotation_Level_2%in%c('Tip-like vascular ECs', 'Stalk-like vascular ECs'), 'Annotation_Level_1'] = 'Vascular ECs'
+
+# 2.4. Annotation level 0:
+Stromal[['Annotation_Level_0']] = factor(rep('Stromal cells', dim(Stromal@meta.data)[1]))
+
+# 2.5. Remove [integrated...] metadata variables
+Stromal@meta.data = Stromal@meta.data[, !colnames(Stromal@meta.data) %in%
+                                      c(grep('^in', colnames(Stromal@meta.data), value=T), 'seurat_clusters')]
+
+# 2.6. Visualize annotations:
+Seurat::DimPlot(Stromal, reduction="umap", group.by='Annotation_Level_3', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Stromal, reduction="umap", group.by='Annotation_Level_2', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Stromal, reduction="umap", group.by='Annotation_Level_1', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+
+# 2.7. Save Seurat object
+SeuratDisk::SaveH5Seurat(Stromal, paste(project_dir, '2_annotation/results_Stromal/datasets/Stromal_finalAnnots.h5Seurat', sep='/'))
 
 
-# -----
-# - Find markers
-# -----
+# 3. Get Markers between the final annotations:
+# 3.1. Annotation Level 3
+Seurat::Idents(Stromal) = 'Annotation_Level_3'
+Stromal_Level_3_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+View(Stromal_Level_3_markers)
+write.csv(Stromal_Level_3_markers, paste(project_dir, '2_annotation/results_Stromal/markers/markers_Level_3.csv', sep='/'))
+invisible(gc())
 
-Seurat::Idents(Stromal) = res
-Stromal_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=1, only.pos=TRUE)
-View(Stromal_markers)
-write.csv(Stromal_markers, paste(project_dir, '2_annotation/markers/Stromal/Stromal_res06.csv', sep='/'))
+# 3.2. Annotation Level 2
+Seurat::Idents(Stromal) = 'Annotation_Level_2'
+Stromal_Level_2_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+View(Stromal_Level_2_markers)
+write.csv(Stromal_Level_2_markers, paste(project_dir, '2_annotation/results_Stromal/markers/markers_Level_2.csv', sep='/'))
+invisible(gc())
 
-# Get top 10 markers for each cluster:
-Stromal_markers_top20 = dplyr::top_n(dplyr::group_by(Stromal_markers, cluster), n=40, wt=avg_log2FC)
-View(Stromal_markers_top20)
-write.csv(Stromal_markers_top20, paste(project_dir, '2_annotation/markers/Stromal/Stromal_res06_top20.csv', sep='/'))
+# 3.3. Annotation Level 1
+Seurat::Idents(Stromal) = 'Annotation_Level_1'
+Stromal_Level_1_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+View(Stromal_Level_1_markers)
+write.csv(Stromal_Level_1_markers, paste(project_dir, '2_annotation/results_Stromal/markers/markers_Level_1.csv', sep='/'))
+invisible(gc())
 
-# Merge clusters together, based on previous markers and similarity measures:
-Stromal[['temp_clusters']] = as.character(Stromal@meta.data[,'temp_clusters0'])
-Stromal$temp_clusters[Stromal$temp_clusters%in%c('5', '6', '7', '17', '21')] = '5_6_7_17_21'
-Stromal$temp_clusters[Stromal$temp_clusters%in%c('1_Tumor', '14_Tumor')] = '1Tumor_14Tumor'
-Stromal$temp_clusters[Stromal$temp_clusters%in%c('1_Normal', '14_Normal', '0', '2', '3', '4', '10', '11', '12', '15', '19', '20')] =
-  '1Normal_14Normal_0_2_3_4_10_11_12_15_19_20'
-Seurat::DimPlot(Stromal, reduction="umap", group.by=res, label=TRUE, label.size=4) + Seurat::NoLegend() |
-  Seurat::DimPlot(Stromal, reduction="umap", group.by='temp_clusters', label=TRUE, label.size=4) + Seurat::NoLegend()
 
-# Calculate markers for new clusters:
-Seurat::Idents(Stromal) = 'temp_clusters'
-Stromal_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, only.pos=TRUE)
-View(Stromal_markers)
-write.csv(Stromal_markers, paste(project_dir, '2_annotation/markers/Stromal/Stromal_tempclusters.csv', sep='/'))
-
-# Get top 20 markers for each cluster:
-Stromal_markers_top20 = dplyr::top_n(dplyr::group_by(Stromal_markers[Stromal_markers$p_val_adj<0.05,], cluster), n=20, wt=avg_log2FC)
-View(Stromal_markers_top20)
-write.csv(Stromal_markers_top20, paste(project_dir, '2_annotation/markers/Stromal/Stromal_tempclusters_top20.csv', sep='/'))
