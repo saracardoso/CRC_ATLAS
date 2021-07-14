@@ -10,3 +10,4 @@ CNV/
 3_generate_atlas_files/
 *.Rmd
 */old_*
+.Rproj.user

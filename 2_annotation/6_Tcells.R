@@ -1,7 +1,7 @@
 project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
 source(paste(project_dir, 'utils/modified_plots.R', sep='/'))
 
-Tcells = SeuratDisk::LoadH5Seurat('/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/results_Bcells/datasets/Tcells.h5Seurat')
+Tcells = SeuratDisk::LoadH5Seurat('/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/results_Tcells/datasets/Tcells.h5Seurat')
 
 
 
@@ -72,7 +72,7 @@ feature_plots(Tcells, c('rna_KLRB1', 'rna_CXCL13', 'rna_IL2RA', 'rna_IL17A'),
 # Cluster 7     --> CD4
 
 # 6. Save object:
-SeuratDisk::SaveH5Seurat(Tcells, paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_clustered.h5Seurat', sep='/'))
+SeuratDisk::SaveH5Seurat(Tcells, paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_clustered.h5Seurat', sep='/'))
 
 
 
@@ -100,7 +100,7 @@ dataset_vector = Tcells_subset@meta.data[colnames(sigma_data), 'dataset']
 # 2. Run SIGMA
 SIGMA_all_res02 = SIGMA::sigma_funct(sigma_data, clusters_02_vector)
 # 2.1. Save SIGMA result
-saveRDS(SIGMA_all_res02, paste(project_dir, '2_annotation/results_Bcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
+saveRDS(SIGMA_all_res02, paste(project_dir, '2_annotation/results_Tcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
 
 # 3. Check results
 # 3.1. Clusterability of all clusters
@@ -136,7 +136,7 @@ invisible(gc())
 # -----
 # - Sub-cluster cluster 0 from resolution 0.2 separately
 # -----
-#Tcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_clustered.h5Seurat', sep='/'))
+#Tcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_clustered.h5Seurat', sep='/'))
 
 
 # 1. Sub-cluster:
@@ -168,7 +168,7 @@ Tcells_0 = Seurat::FindClusters(Tcells_0, resolution=seq(0.1, 1, by=.1))
 Tcells_0 = Seurat::RunUMAP(Tcells_0, dims=1:elbow, reduction='pca')
 invisible(gc())
 # 1.8. Save object
-SeuratDisk::SaveH5Seurat(Tcells_0, paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_0.h5Seurat', sep='/'))
+SeuratDisk::SaveH5Seurat(Tcells_0, paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_0.h5Seurat', sep='/'))
 
 
 # 2. Choose best resolution using clustree:
@@ -199,7 +199,7 @@ violin_plots(Tcells_0, c('rna_CCR7', 'rna_SELL', 'rna_PASK', 'rna_KLRB1', 'rna_S
 Seurat::Idents(Tcells_0) = 'integrated_snn_res.0.2'
 Tcells_0_markers = Seurat::FindAllMarkers(Tcells_0, assay='RNA', slot='data', logfc.threshold=.5, only.pos=TRUE)
 View(Tcells_0_markers)
-write.csv(Tcells_0_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_C0_res02.csv', sep='/'))
+write.csv(Tcells_0_markers, paste(project_dir, '2_annotation/results_Tcells/markers/markers_C0_res02.csv', sep='/'))
 # 3.2. Get top 20 markers for each sub-cluster
 Tcells_0_markers_top20 = c()
 for(clust in as.character(unique(Tcells_0_markers$cluster))){
@@ -211,7 +211,7 @@ for(clust in as.character(unique(Tcells_0_markers$cluster))){
   Tcells_0_markers_top20 = rbind(Tcells_0_markers_top20, top20_clust_markers)
 }
 View(Tcells_0_markers_top20)
-write.csv(Tcells_0_markers_top20, paste(project_dir, '2_annotation/results_Bcells/markers/markers_C0_res02_top20.csv', sep='/'))
+write.csv(Tcells_0_markers_top20, paste(project_dir, '2_annotation/results_Tcells/markers/markers_C0_res02_top20.csv', sep='/'))
 
 
 # 4. Annotation:
@@ -222,7 +222,7 @@ write.csv(Tcells_0_markers_top20, paste(project_dir, '2_annotation/results_Bcell
 
 
 # 5. Check previous SIGMA result and colour cluster 0 by new sub-clusters
-SIGMA_all_res02 = readRDS(paste(project_dir, '2_annotation/results_Bcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
+SIGMA_all_res02 = readRDS(paste(project_dir, '2_annotation/results_Tcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
 cluster_0_cells = rownames(Tcells_0@meta.data)
 subclusters_0 = Tcells_0$integrated_snn_res.0.2[intersect(colnames(SIGMA_all_res02$input_parameters$expr), cluster_0_cells)]
 subclusters_firstAnnotations = as.character(subclusters_0)
@@ -249,7 +249,7 @@ Tcells_0@meta.data[EM_cells, 'Final_Annotation'] = 'EM CD4 Tcells'
 Seurat::DimPlot(Tcells_0, group.by='Final_Annotation', pt.size=0.5, label=T, label.size=4) +
   ggplot2::ggtitle('') + ggplot2::theme_minimal() + Seurat::NoLegend()
 # 7.3. Save changes:
-SeuratDisk::SaveH5Seurat(Tcells_0, paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_0.h5Seurat', sep='/'), overwrite=TRUE)
+SeuratDisk::SaveH5Seurat(Tcells_0, paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_0.h5Seurat', sep='/'), overwrite=TRUE)
 
 
 
@@ -258,7 +258,7 @@ SeuratDisk::SaveH5Seurat(Tcells_0, paste(project_dir, '2_annotation/results_Bcel
 # -----
 # - Sub-cluster cluster 1 from resolution 0.2 separately
 # -----
-#Tcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_clustered.h5Seurat', sep='/'))
+#Tcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_clustered.h5Seurat', sep='/'))
 
 
 # 1. Sub-cluster:
@@ -290,7 +290,7 @@ Tcells_1 = Seurat::FindClusters(Tcells_1, resolution=seq(0.1, 1, by=.1))
 Tcells_1 = Seurat::RunUMAP(Tcells_1, dims=1:elbow, reduction='pca')
 invisible(gc())
 # 1.8. Save object
-SeuratDisk::SaveH5Seurat(Tcells_1, paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_1.h5Seurat', sep='/'))
+SeuratDisk::SaveH5Seurat(Tcells_1, paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_1.h5Seurat', sep='/'))
 
 
 # 2. Choose best resolution using clustree:
@@ -337,7 +337,7 @@ feature_plots(Tcells_1, c('rna_CCR7', 'rna_SELL', 'rna_LEF1', 'rna_TCF7', 'rna_P
 Seurat::Idents(Tcells_1) = 'integrated_snn_res.0.9'
 Tcells_1_markers = Seurat::FindAllMarkers(Tcells_1, assay='RNA', slot='data', logfc.threshold=.5, only.pos=TRUE)
 View(Tcells_1_markers)
-write.csv(Tcells_1_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_C1_res09.csv', sep='/'))
+write.csv(Tcells_1_markers, paste(project_dir, '2_annotation/results_Tcells/markers/markers_C1_res09.csv', sep='/'))
 # 3.2. Get top 20 markers for each sub-cluster
 Tcells_1_markers_top20 = c()
 for(clust in as.character(unique(Tcells_1_markers$cluster))){
@@ -349,7 +349,7 @@ for(clust in as.character(unique(Tcells_1_markers$cluster))){
   Tcells_1_markers_top20 = rbind(Tcells_1_markers_top20, top20_clust_markers)
 }
 View(Tcells_1_markers_top20)
-write.csv(Tcells_1_markers_top20, paste(project_dir, '2_annotation/results_Bcells/markers/markers_C1_res09_top20.csv', sep='/'))
+write.csv(Tcells_1_markers_top20, paste(project_dir, '2_annotation/results_Tcells/markers/markers_C1_res09_top20.csv', sep='/'))
 
 
 # 4. Annotate sub-clusters:
@@ -383,7 +383,7 @@ Tcells_1@meta.data[DNNKT_cells, 'Final_Annotation'] = 'DN Tcells? NKT cells?'
 naive_cells = rownames(Tcells_1@meta.data)[Tcells_1$integrated_snn_res.0.9=='15']
 Tcells_1@meta.data[naive_cells, 'Final_Annotation'] = 'Naive CD8 Tcells'
 # 4.2. Check previous SIGMA result and colour cluster 0 by new sub-clusters
-SIGMA_all_res02 = readRDS(paste(project_dir, '2_annotation/results_Bcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
+SIGMA_all_res02 = readRDS(paste(project_dir, '2_annotation/results_Tcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
 cluster_1_cells = rownames(Tcells_1@meta.data)
 subclusters_1 = Tcells_1$Final_Annotation[intersect(colnames(SIGMA_all_res02$input_parameters$expr), cluster_1_cells)]
 SIGMA::plot_singular_vectors(SIGMA_all_res02, '1', colour=as.character(subclusters_1))
@@ -391,7 +391,7 @@ SIGMA::plot_singular_vectors(SIGMA_all_res02, '1', colour=as.character(subcluste
 Seurat::DimPlot(Tcells_1, group.by='Final_Annotation', pt.size=0.5, label=F) +
   ggplot2::ggtitle('') + ggplot2::theme_minimal()# + Seurat::NoLegend()
 # 4.4. Save changes:
-SeuratDisk::SaveH5Seurat(Tcells_1, paste(project_dir, '2_annotation/results_Bcells/datasets/Tcells_1.h5Seurat', sep='/'), overwrite=TRUE)
+SeuratDisk::SaveH5Seurat(Tcells_1, paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_1.h5Seurat', sep='/'), overwrite=TRUE)
 
 
 

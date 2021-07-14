@@ -45,6 +45,7 @@ Bcells = Seurat::FindClusters(Bcells, resolution=seq(0.1, 1, by=.1))
 Bcells = Seurat::RunUMAP(Bcells, dims=1:elbow, reduction='pca')
 invisible(gc())
 
+
 # 4. Choose best resolution:
 library(ggraph)
 clust_tree = clustree::clustree(Bcells, prefix='integrated_snn_res.')
