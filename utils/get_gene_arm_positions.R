@@ -38,4 +38,5 @@ for(chr in unique(chrs_genes$V2)){
 }
 sum(is.na(chrs_genes$arm))
 chrs_genes$arm[which(is.na(chrs_genes$arm))] = 'p'
+chrs_genes$chr_arm = paste(chrs_genes$V2, chrs_genes$arm, sep='')
 write.table(chrs_genes, paste(project_dir, 'utils/gene_pos_wArms.txt', sep='/'))

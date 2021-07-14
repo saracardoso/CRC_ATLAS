@@ -11,3 +11,4 @@ CNV/
 *.Rmd
 */old_*
 .Rproj.user
+inferCNV/

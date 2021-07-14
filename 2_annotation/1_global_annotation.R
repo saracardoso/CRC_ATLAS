@@ -167,7 +167,7 @@ Seurat::DimPlot(CRCatlas_integrated, reduction="umap", group.by='Level_0', label
 Seurat::DimPlot(CRCatlas_integrated, reduction="umap", split.by='Level_0', group.by='Level_0', label=FALSE, pt.size=1)
 
 # Store integrated CRCatlas for annotation purposes:
-SeuratDisk::SaveH5Seurat(CRCatlas_integrated, '/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/CRC_annotations.h5Seurat')
+SeuratDisk::SaveH5Seurat(CRCatlas_integrated, paste(project_dir, '2_annotation/results_globalAnnotation/datasets/CRC_annotations.h5Seurat', sep='/'))
 
 
 
@@ -179,33 +179,27 @@ Seurat::DefaultAssay(CRCatlas_integrated) = 'RNA'
 CRCatlas_integrated@meta.data = CRCatlas_integrated@meta.data[, !colnames(CRCatlas_integrated@meta.data) %in%
                                                                 c('integrated_snn_res.0.1', 'seurat_clusters')]
 
-# Epithelial cells:
+# Epithelial cells: (these will not be re-integrated)
 epithelial_cells = subset(CRCatlas_integrated,
                           cells=rownames(CRCatlas_integrated@meta.data)[CRCatlas_integrated$Level_0=='Epithelial cells'])
-epithelial_cells = Seurat::DietSeurat(epithelial_cells, counts=TRUE, data=TRUE, scale.data=FALSE, assays='RNA')
-SeuratDisk::SaveH5Seurat(epithelial_cells, '/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/epithelial_cells.h5Seurat')
+SeuratDisk::SaveH5Seurat(epithelial_cells, paste(project_dir, '/2_annotation/results_Epithelial/datasets/epithelial_cells.h5Seurat', sep='/'))
 
 # Stromal cells:
 stromal_cells = subset(CRCatlas_integrated,
                        cells=rownames(CRCatlas_integrated@meta.data)[CRCatlas_integrated$Level_0=='Stromal cells'])
-stromal_cells = Seurat::DietSeurat(stromal_cells, counts=TRUE, data=TRUE, scale.data=FALSE, assays='RNA')
-SeuratDisk::SaveH5Seurat(stromal_cells, '/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/stromal_cells.h5Seurat')
+SeuratDisk::SaveH5Seurat(stromal_cells, paste(project_dir, '/2_annotation/results_Stromal/datasets/stromal_cells.h5Seurat', sep='/'))
 
 # Myeloid cells:
 myeloid_cells = subset(CRCatlas_integrated,
                        cells=rownames(CRCatlas_integrated@meta.data)[CRCatlas_integrated$Level_0=='Myeloid cells'])
-myeloid_cells = Seurat::DietSeurat(myeloid_cells, counts=TRUE, data=TRUE, scale.data=FALSE, assays='RNA')
-SeuratDisk::SaveH5Seurat(myeloid_cells, '/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/myeloid_cells.h5Seurat')
+SeuratDisk::SaveH5Seurat(myeloid_cells, paste(project_dir, '/2_annotation/results_Myeloid/datasets/myeloid_cells.h5Seurat', sep='/'))
 
 # Bcells:
 Bcells = subset(CRCatlas_integrated,
                 cells=rownames(CRCatlas_integrated@meta.data)[CRCatlas_integrated$Level_0=='Bcells'])
-Bcells = Seurat::DietSeurat(Bcells, counts=TRUE, data=TRUE, scale.data=FALSE, assays='RNA')
-SeuratDisk::SaveH5Seurat(Bcells, '/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/Bcells.h5Seurat')
+SeuratDisk::SaveH5Seurat(Bcells, paste(project_dir, '/2_annotation/results_Bcells/datasets/Bcells.h5Seurat', sep='/'))
 
 # Tcells:
-Tcells = subset(CRCatlas_integrated,
-                cells=rownames(CRCatlas_integrated@meta.data)[CRCatlas_integrated$Level_0=='Tcells'])
-Tcells = Seurat::DietSeurat(Tcells, counts=TRUE, data=TRUE, scale.data=FALSE, assays='RNA')
+Tcells = subset(CRCatlas_integrated, cells=rownames(CRCatlas_integrated@meta.data)[CRCatlas_integrated$Level_0=='Tcells'])
 SeuratDisk::SaveH5Seurat(Tcells, '/home/scardoso/Documents/PhD/CRC_ATLAS/2_annotation/data/Tcells.h5Seurat')
 
