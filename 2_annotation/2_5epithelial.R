@@ -53,7 +53,7 @@ invisible(gc())
 # - CMS classification
 # ---
 
-# CMScaller was installed using: devtools::install_github("Lothelab/CMScaller")
+# CMScaller was installed using: remotes::install_github("Lothelab/CMScaller")
 
 
 # 1. Classify tumour cells individually using CMScaller
@@ -228,7 +228,7 @@ for(samp in unique(as.character(Epithelial_tumour@meta.data[,'sample']))){
   x[is.na(x)] = 0
   sumx = sum(x)
   y = x/sumx
-
+  
   samples = c(samples, rep(samp, 5))
   labels = c(labels, rep(as.character(res_cms_samples[samp,'prediction']), 5))
   cell_types = c(cell_types, cts)
@@ -263,7 +263,7 @@ dist_ct2$classification[is.na(dist_ct2$classification)] = 'Mixed'
 ct_boxplot2 = ggplot2::ggplot(dist_ct2, ggplot2::aes(classification, proportion, colour=classification)) +
   ggplot2::geom_boxplot() + ggplot2::facet_wrap(ggplot2::vars(cell_type)) +
   ggplot2::scale_color_manual(values=c('CMS1'='#f8766d', 'CMS2'='#7cae00', 'CMS3'='#00bfc4', 'CMS4'='#c77cff',
-                                'Mixed'='#cccccc')) + Seurat::RotatedAxis()
+                                       'Mixed'='#cccccc')) + Seurat::RotatedAxis()
 
 
 # 4. Hierarchical clustering of samples (do samples from same CMS cluster together?)
@@ -305,37 +305,18 @@ Seurat::DimPlot(Epithelial_tumour, group.by='Annotation_Level_1', pt.size=.2) + 
   ggplot2::ggtitle('') + ggplot2::scale_color_manual(values=c('CMS1'='#f8766d', 'CMS2'='#7cae00', 'CMS3'='#00bfc4', 'CMS4'='#c77cff',
                                                               'Mixed'='#cccccc'))
 
+# 7. Save Seurat object
+SeuratDisk::SaveH5Seurat(Epithelial_tumour, paste(project_dir, '2_annotation/results_Epithelial/datasets/Epithelial_tumour_finalAnnots.h5Seurat', sep='/'))
 
-# 7. Get Markers between the CMS annotations:
-# 7.1. Calculate markers
+
+# 8. Get Markers between the CMS annotations:
+# 8.1. Calculate markers
 Seurat::Idents(Epithelial_tumour) = 'Annotation_Level_1'
 Epithelial_tumour_Level_1_markers = Seurat::FindAllMarkers(Epithelial_tumour, assay='RNA', slot='data', logfc.threshold=.8,
                                                            min.pct = 0.3, only.pos=TRUE)
 View(Epithelial_tumour_Level_1_markers)
 write.csv(Epithelial_tumour_Level_1_markers, paste(project_dir, '2_annotation/results_Epithelial/markers/markers_tumour_Level_1.csv', sep='/'))
 invisible(gc())
-
-# 7.2. Create a list of the markers per CMS annotation to perform the next analyses
-genes_to_test = list()
-for(cms in unique(Epithelial_tumour$Annotation_Level_1)){
-  genes_to_test[[cms]] = Epithelial_tumour_Level_1_markers$gene[Epithelial_tumour_Level_1_markers$cluster==cms]
-}
-
-# 7.3. Perform GO enrichment analysis for each CMS annotation's markers
-# 7.3.1. Fit the Probability Weighting Function (PWF)
-pwf = nullp(genes, "mm10", "ensGene", bias.data = shrinkLvV$medianTxLength)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -345,184 +326,35 @@ pwf = nullp(genes, "mm10", "ensGene", bias.data = shrinkLvV$medianTxLength)
 # - Check CNAs
 # ---
 
-# 1. A CNA will be considered a characteristic of the patient if it is present in more than 2/3 of the cells
-# 1.1. Get CNA characteristics
-n_patients = length(unique(Epithelial_tumour$patient))
-cnas = grep('CNA_chr', colnames(Epithelial_tumour[[]]), value=T)
-n_cnas = length(cnas)
-cna_distribution = matrix(rep(NA, n_patients*n_cnas), nrow=n_cnas)
-dimnames(cna_distribution) = list(cnas, unique(Epithelial_tumour$patient))
-for(patient in unique(Epithelial_tumour$patient)){
-  n_cells_patient = sum(Epithelial_tumour$patient==patient)
-  for(cna in cnas){
-    cna_patient = table(Epithelial_tumour@meta.data[Epithelial_tumour$patient==patient, cna]) / n_cells_patient
-    if (sum(cna_patient > 2/3)==0){
-      max_cna = rownames(cna_patient)[which.max(cna_patient)]
-      if(max_cna == 'Gain' & max(cna_patient)>0.5) cna_distribution[cna, patient] = 0.5
-      else if(max_cna == 'Loss' & max(cna_patient)>0.5) cna_distribution[cna, patient] = -0.5
-      }
-    else{
-      cna_val = rownames(cna_patient)[cna_patient > 2/3]
-      if (cna_val == 'Gain') cna_distribution[cna, patient] =  1
-      else if (cna_val == 'Loss') cna_distribution[cna, patient] =  -1
-      else cna_distribution[cna, patient] =  0
-    }
+
+# 1. Check distribution of CNAs by CMS annotation
+cms_vec = c()
+chr_vec = c()
+type_vec = c()
+props_vec = c()
+for(cms in unique(Epithelial_tumour$Annotation_Level_1)){
+  cms_cells = Epithelial_tumour@meta.data[Epithelial_tumour$Annotation_Level_1==cms, ]
+  for(chr in grep('chr', colnames(Epithelial_tumour[[]]), value=T)){
+    chr_name = gsub('CNA_', '', chr)
+    chr_losses = sum(cms_cells[,chr]=='Loss') / dim(cms_cells)[1]
+    chr_gains = sum(cms_cells[,chr]=='Gain') / dim(cms_cells)[1]
+    chr_neutrals = sum(cms_cells[,chr]=='Neutral') / dim(cms_cells)[1]
+    
+    cms_vec = c(cms_vec, rep(cms, 3))
+    chr_vec = c(chr_vec, rep(chr_name, 3))
+    type_vec = c(type_vec, c('Loss', 'Neutral', 'Gain'))
+    props_vec = c(props_vec, c(chr_losses, chr_neutrals, chr_gains))
   }
 }
+cna_cms_df = data.frame(CMS=cms_vec, chr_arm=chr_vec, type=type_vec, proportions=props_vec)
+cna_cms_df$chr_arm = factor(cna_cms_df$chr_arm, levels=c('chr1p', 'chr1q', 'chr2p', 'chr2q', 'chr3p', 'chr3q', 'chr4p', 'chr4q',
+                                                         'chr5p', 'chr5q', 'chr6p', 'chr6q', 'chr7p', 'chr7q', 'chr8p', 'chr8q',
+                                                         'chr9p', 'chr9q', 'chr10p', 'chr10q', 'chr11p', 'chr11q', 'chr12p', 'chr12q',
+                                                         'chr13q', 'chr14q', 'chr15q', 'chr16p', 'chr16q', 'chr17p', 'chr17q', 'chr18p',
+                                                         'chr18q', 'chr19p', 'chr19q', 'chr20p', 'chr20q', 'chr21q', 'chr22q'))
+cna_cms_df$type = factor(cna_cms_df$type, levels=c('Loss', 'Neutral', 'Gain'))
 
-# 1.2. Map it into an heatmap
-pheatmap::pheatmap(cna_distribution, cluster_rows=T, cluster_cols=T, na_col="grey", display_numbers=FALSE,
-                   main='')
-# 1.3. Patients can be somewhat separated into 5 groups:
-#      - Gains in 13q, 7, 20 (most patients), 8q (some). Losses in 18 (most), 17p, 15q, 8p, 14q (some)
-#           SMC02, SMC04, SMC07, SMC08, SMC11, SMC14, SMC18, SMC21, 38, KUL30
-#      - Gains in 13q, 20 (most), 8q (some). No Losses in most patients
-#           SMC09, SMC22, SMC23, 32, 35, KUL19
-#      - Gains in 13q, 20q, 8q, 7, 5p (most), 1q, 9q (some). Losses and gains in other chromosomes is variable.
-#           SMC16, SMC20, SMC25, 36, KUL28, KUL31
-#      - Gains in 2p, 4p (most). Losses in 17p, 18, 6p (most)
-#           SMC01, SMC15, 33, 37, KUL21
-#      - No characteristic CNAs or very little (<=4) that do not really fit previous groups
-#           SMC03, SMC05, SMC06, SMC10, SMC17, SMC19, SMC24, 31, KUL01
-
-
-
-
-
-# ---
-# - Explore Gene expression
-# ---
-
-# 1. Calculate similarity between patients
-# 1.1. Calculate average expression profiles of each cluster:
-patients_average_profiles = Seurat::AverageExpression(Epithelial_tumour, group.by = 'patient', assays='RNA', slor='data')$RNA
-# 1.2. Calculate distance matrices between clusters:
-patients_dist_average_clusts = dist(t(patients_average_profiles), method='euclidean')
-# 1.3. Create dendogram:
-hclust_average_clusters = hclust(patients_dist_average_clusts, method='complete')
-plot(hclust_average_clusters, main='Clustering based on average profiles')
-
-
-
-
-
-# -----
-# - Find clusters
-# -----
-
-
-# 1. Run PCA:
-Epithelial_tumour = Seurat::RunPCA(Epithelial_tumour, assay='integrated')
-invisible(gc())
-Seurat::DefaultAssay(Epithelial_tumour)='integrated'
-
-# 2. Choose number of PCs to use (where the elbow occurs):
-pct = Epithelial_tumour[["pca"]]@stdev /sum(Epithelial_tumour[["pca"]]@stdev) * 100
-cumu = cumsum(pct)
-co1 = which(cumu > 90 & pct < 5)[1]
-co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
-# 2.1 Number of PCs to use
-elbow = min(co1, co2) # 18
-# 2.2. Visual representation of the PCs to use
-plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
-ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
-  ggplot2::geom_text() + 
-  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
-  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
-  ggplot2::theme_bw()
-# 2.3. Heatmap of the first 18 PCs
-Seurat::DimHeatmap(Epithelial_tumour, dims=1:18, cells=500, balanced=TRUE)
-
-
-# 3. Find clusters
-# 3.1. Determine the K-nearest neighbor graph
-Epithelial_tumour = Seurat::FindNeighbors(Epithelial_tumour, dims=1:elbow)
-# 3.2. Find clusters:
-Epithelial_tumour = Seurat::FindClusters(Epithelial_tumour, resolution=seq(0.1, 1, by=.1))
-# 3.3. UMAP:
-Epithelial_tumour = Seurat::RunUMAP(Epithelial_tumour, dims=1:elbow, reduction='pca')
-invisible(gc())
-
-# 4. Check how they cluster (datasets, patients and samples)
-patients = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='patient', label=TRUE, label.size=3, pt.size=.1) +
-  ggplot2::theme_minimal() + Seurat::NoLegend()
-datasets = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='dataset', label=FALSE, pt.size=.1) +
-  ggplot2::theme_minimal() + ggplot2::theme(legend.position = 'bottom')
-patients | datasets
-
-
-# 5. Choose best resolution:
-# 5.1. Visualize different resolutions:
-clusters_01 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=4, pt.size=.2) +
-  ggplot2::theme_minimal()
-clusters_02 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.2', label=TRUE, label.size=4, pt.size=.2) +
-  ggplot2::theme_minimal()
-clusters_03 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.3', label=TRUE, label.size=4, pt.size=.2) +
-  ggplot2::theme_minimal()
-clusters_04 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=4, pt.size=.2) +
-  ggplot2::theme_minimal()
-clusters_05 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.5', label=TRUE, label.size=4, pt.size=.2) +
-  ggplot2::theme_minimal()
-clusters_06 = Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='integrated_snn_res.0.6', label=TRUE, label.size=4, pt.size=.2) +
-  ggplot2::theme_minimal()
-(clusters_01 | clusters_02 | clusters_03) / (clusters_04 | clusters_05 | clusters_06)
-
-# 5.2. Patient distribution across clusters:
-n_patients = length(unique(Epithelial_tumour$patient))
-n_clusters = length(unique(Epithelial_tumour$integrated_snn_res.0.1))
-patient_distribution = matrix(rep(0, n_patients*n_clusters), nrow=n_patients)
-dimnames(patient_distribution) = list(unique(Epithelial_tumour$patient), as.character(0:(n_clusters-1)))
-for(cluster in colnames(patient_distribution)){
-  x = table(Epithelial_tumour$patient[Epithelial_tumour@meta.data[,'integrated_snn_res.0.1']==cluster])[rownames(patient_distribution)]
-  x[is.na(x)] = 0
-  patient_distribution[,cluster] = x
-}
-View(patient_distribution)
-
-
-
-
-
-
-
-
-
-# 5.2. Color by genes of interest:
-genes_to_check = c('rna_MYC', 'rna_RNF43', 'rna_AXIN2', 'rna_CTNNB1', 'rna_CD44', 'rna_MLH1')
-feature_plots(Epithelial_tumour, genes_to_check, ncol=4, with_dimplot=TRUE, point_size=.4, dimplot_group = 'integrated_snn_res.0.3')
-violin_plots(Epithelial_tumour, genes_to_check, ncol=4, with_dimplot=FALSE, group.by='integrated_snn_res.0.3')
-
-
-rgb.val <- grDevices::col2rgb('grey')
-grey_transparent <- rgb(rgb.val[1], rgb.val[2], rgb.val[3],  max = 255,
-                        alpha = (100 - 50) * 255 / 100, names = 'greyTransparent')
-invisible(grey_transparent)
-color_vec = c('red', 'blue', grey_transparent)
-(Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='CNA_chr1p', label.size=4, pt.size=.2, cols=color_vec) +
-  ggplot2::theme_minimal() |
-  Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='CNA_chr1q', label.size=4, pt.size=.2, cols=color_vec) +
-  ggplot2::theme_minimal()) /
-  ( Seurat::DimPlot(Epithelial_tumour, reduction="umap", group.by='CNA_chr2p', label.size=4, pt.size=.2, cols=color_vec) +
-      ggplot2::theme_minimal() | patients)
-
-
-
-
-
-
-
-
-# 4. Calculate similarity between patients
-# 4.1. Calculate average expression profiles of each cluster:
-patients_average_profiles = Seurat::AverageExpression(Epithelial_tumour, group.by = 'patient', assays='RNA', slor='data')$RNA
-# 4.2. Calculate distance matrices between clusters:
-patients_dist_average_clusts = dist(t(patients_average_profiles), method='euclidean')
-# 4.3. Visualize distance matrices:
-dist_average_clusts_matrix = as.matrix(patients_dist_average_clusts)
-#dist_average_clusts_matrix[upper.tri(dist_average_clusts_matrix)] <- NA
-pheatmap::pheatmap(dist_average_clusts_matrix, cluster_rows=F, cluster_cols=F, na_col="white", display_numbers=TRUE,
-                   main='Clusters distance based on average profiles')
-# 4.4. Create dendogram:
-hclust_average_clusters = hclust(patients_dist_average_clusts, method='complete')
-plot(hclust_average_clusters, main='Clustering based on average profiles')
-
+ggplot2::ggplot(cna_cms_df, mapping = ggplot2::aes(x=CMS, y=proportions, fill=type)) +
+  ggplot2::geom_bar(stat='identity') + ggplot2::ylab('Ratio') + ggplot2::xlab('CMS') + ggplot2::facet_wrap(ggplot2::vars(chr_arm)) + 
+  ggplot2::scale_fill_manual(values=c('Loss'='blue', 'Neutral'='lightgrey', 'Gain'='red')) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position='bottom') + Seurat::RotatedAxis()
