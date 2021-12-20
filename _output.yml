@@ -2,7 +2,9 @@ bookdown::bs4_book:
   css: bs4_style.css
   theme:
     primary: "#096B72"
-  repo: https://github.com/rstudio/bookdown-demo
+  repo:
+    base: https://github.com/saracardoso/CRC_ATLAS
+    branch: bookdown
 bookdown::pdf_book:
   includes:
     in_header: preamble.tex

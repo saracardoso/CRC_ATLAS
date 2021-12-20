@@ -1,15 +1,3 @@
-*.h5Seurat
-*.xlsx
-*.Rdata
-FINAL_ATLAS/
-cellxgene/
-original_datasets/
 *.nb.html
-old_
-CNV/
-*.Rmd
-*/old_*
 .Rproj.user
-inferCNV/
-website/
 _book/
