@@ -1,60 +1,43 @@
---- 
-title: "A Minimal Book Example"
-author: "John Doe"
+---
+title: "Construction of the CRC atlas"
+author: "Sara Cardoso"
 date: "`r Sys.Date()`"
 site: bookdown::bookdown_site
 documentclass: book
 bibliography: [book.bib, packages.bib]
 # url: your book url like https://bookdown.org/yihui/bookdown
 # cover-image: path to the social sharing image like images/cover.jpg
-description: |
-  This is a minimal example of using the bookdown package to write a book.
-  The HTML output format for this example is bookdown::bs4_book,
-  set in the _output.yml file.
+# description: |
+#  This is a minimal example of using the bookdown package to write a book.
+#  The HTML output format for this example is bookdown::bs4_book,
+#  set in the _output.yml file.
 biblio-style: apalike
 csl: chicago-fullnote-bibliography.csl
+#bmc-bioinformatics.csl
 ---
 
-# About
+# First things first {.unnumbered}
 
-This is a _sample_ book written in **Markdown**. You can use anything that Pandoc's Markdown supports; for example, a math equation $a^2 + b^2 = c^2$.
+In this page, we make available a detailed explanation on how we constructed the ColoRectal Cancer (CRC) atlas of single-cell RNAseq (scRNAseq) data. This allows full reproducibility of the analysis performed.
 
-## Usage 
+You will find all the original code files in the [github project](https://github.com/saracardoso/CRC_ATLAS) of this atlas (also accessible through [Important Links](#important-links)).
 
-Each **bookdown** chapter is an .Rmd file, and each .Rmd file can contain one (and only one) chapter. A chapter *must* start with a first-level heading: `# A good chapter`, and can contain one (and only one) first-level heading.
+::: {.rmdnote}
+**NOTE**
 
-Use second-level and higher headings within chapters like: `## A short section` or `### An even shorter section`.
-
-The `index.Rmd` file is required, and is also your first book chapter. It will be the homepage when you render the book.
-
-## Render book
-
-You can render the HTML version of this example book without changing anything:
-
-1. Find the **Build** pane in the RStudio IDE, and
-
-1. Click on **Build Book**, then select your output format, or select "All formats" if you'd like to use multiple formats from the same book source files.
-
-Or build the book from the R console:
-
-```{r, eval=FALSE}
-bookdown::render_book()
-```
-
-To render this example to PDF as a `bookdown::pdf_book`, you'll need to install XeLaTeX. You are recommended to install TinyTeX (which includes XeLaTeX): <https://yihui.org/tinytex/>.
-
-## Preview book
-
-As you work, you may start a local server to live preview this HTML book. This preview will update as you edit the book when you save individual .Rmd files. You can start the server in a work session by using the RStudio add-in "Preview book", or from the R console:
+All paths in this documentation can be changed for your case by only adapting `project_dir` variable to where the *CRC_ATLAS* directory is in your device.
 
 ```{r eval=FALSE}
-bookdown::serve_book()
+# Project's path:
+project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
 ```
+:::
 
+All the scRNAseq analysis was performed using the R language [@R-base], version 4.1.0. The packages used were the following: *Seurat* [@R-Seurat] (v.4.0.3), *SeuratDisk* [@R-SeuratDisk] (v.0.0.0.9019), *SeuratObject* [@R-SeuratObject] (v.4.0.2), *clustree* [@R-clustree] (v.0.4.3), *SIGMA* [@R-SIGMA] (v.0.0.0.1), *infercnv* [@R-infercnv] (v.1.8.0), and *CMScaller* [@R-CMScaller] (v.0.99.2).
 
 ```{r include=FALSE}
 # automatically create a bib database for R packages
 knitr::write_bib(c(
-  .packages(), 'bookdown', 'knitr', 'rmarkdown'
+  .packages(), 'bookdown', 'knitr', 'rmarkdown', 'Seurat', 'SeuratDisk', 'SeuratObject', 'clustree', 'SIGMA', 'infercnv', 'CMScaller'
 ), 'packages.bib')
 ```
