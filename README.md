@@ -1,14 +1,13 @@
-# CRC ATLAS
+Welcome! 
 
-**For a detailed explanation on how we constructed the atlas and visualize it, access here: [UPCOMING].**
+This is a minimal example of a book based on R Markdown and **bookdown** (https://github.com/rstudio/bookdown). 
 
-The scripts developed to construct the CRC atlas are organized in this project as follows:
+This template provides a skeleton file structure that you can edit to create your book. 
 
-- __*0_initial_data_evaluation*__: quality control of each of the datasets used to construct the atlas;
+The contents inside the .Rmd files provide some pointers to help you get started, but feel free to also delete the content in each file and start fresh.
 
-- __*1_merge*__: merge and integration of the different datasets together into one;
+Additional resources:
 
-- __*2_annotation*__: annotation of the cells into the various cell-types
+The **bookdown** book: https://bookdown.org/yihui/bookdown/
 
-- __*3_generate_atlas_files*__: script to generate the final atlas files, made available at [UPCOMING]
-
+The **bookdown** package reference site: https://pkgs.rstudio.com/bookdown
