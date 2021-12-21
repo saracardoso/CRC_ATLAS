@@ -35,6 +35,15 @@ project_dir = '/home/scardoso/Documents/PhD/CRC_ATLAS'
 
 All the scRNAseq analysis was performed using the R language [@R-base], version 4.1.0. The packages used were the following: *Seurat* [@R-Seurat] (v.4.0.3), *SeuratDisk* [@R-SeuratDisk] (v.0.0.0.9019), *SeuratObject* [@R-SeuratObject] (v.4.0.2), *clustree* [@R-clustree] (v.0.4.3), *SIGMA* [@R-SIGMA] (v.0.0.0.1), *infercnv* [@R-infercnv] (v.1.8.0), and *CMScaller* [@R-CMScaller] (v.0.99.2).
 
+------------------------------------------------------------------------------------------------------------------------------------
+
+```{r echo=FALSE, out.width="20%"}
+knitr::include_graphics(c('images/ENG-EN.png', 'images/lumc.jpg', 'images/FCT.png'))
+```
+
+*This project was funded by the PhD scholarship with reference SFRH/BD/138951/2018, awarded by Fundação para a Ciência e Tecnologia (FCT).*
+
+
 ```{r include=FALSE}
 # automatically create a bib database for R packages
 knitr::write_bib(c(
