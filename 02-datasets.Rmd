@@ -2,4 +2,30 @@
 
 # Datasets Used
 
-...
+Four publicly available datasets were chosen to construct this atlas. All except one correspond to CRC studies. The remaining study, here named *Colon_smillie*, focused on studying the colon of patients with ulcerative colitis. However, this study also analysed samples from 12 healthy individuals. Only the samples regarding these individuals were used.
+
+|                 | CRC_Qian       | GSE132465            | GSE144735            | Colon_smillie  |
+|-----------------|----------------|----------------------|----------------------|----------------|
+| **Nº Patients** | 7              | 23                   | 6                    | 12             |
+| **Nº Samples**  | 21             | 33                   | 18                   | 48             |
+| **Nº Cells**    |                |                      |                      |                |
+| Before QC       | 44 684         | 63 689               | 27 414               | 51 705         |
+| After QC        | 29 793         | 57 804               | 24 510               | 50 811         |
+| **Technology**  | 3' 10x         | 3' 10x               | 3' 10x               | 3' 10x         |
+|                 | @CRC_Qian      | @GSE144735_GSE144735 | @GSE144735_GSE144735 | @Colon_smillie |
+
+For studies *CRC_Qian* and *GSEGSE144735* have tumour (border and core) and normal matched mucosa samples for each patient. For study *GSE132465*, 10 of the 23 patients have tumour and normal matched mucosa samples, while the other 13 only have tumour samples.
+
+Regarding *Colon_smillie* dataset, each donor has a sample extracted from two different locations of the colon.
+
+## From where did we get the data?
+
+**CRC_Qian** The data was downloaded from the [website](http://blueprint.lambrechtslab.org/#/6bee739f-6ff3-446d-b47d-88535bcee4fc/CRC.loom/welcome) created by the authors to make their data publicly available. More specifically, the data files were downloaded from [this link](http://blueprint.lambrechtslab.org/download/CRC_counts.tar.gz) and the metadata file from [this link](http://blueprint.lambrechtslab.org/download/CRC_metadata.csv.gz).
+
+The data files were in the format used by 10XGenomics (*barcodes.tsv*, *genes.tsv*, *matrix.mtx*), while the metadata file was in the csv format.
+
+**GSE132463** The data of this study was available through [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE132465). The raw counts were available in a txt file ([link](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE132nnn/GSE132465/suppl/GSE132465%5FGEO%5Fprocessed%5FCRC%5F10X%5Fraw%5FUMI%5Fcount%5Fmatrix%2Etxt%2Egz)), as well as the metadata file ([link](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE132nnn/GSE132465/suppl/GSE132465%5FGEO%5Fprocessed%5FCRC%5F10X%5Fcell%5Fannotation%2Etxt%2Egz)).
+
+**GSE144735** The data of this study was available through [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE144735). The raw counts were available in a txt file ([link](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144735/suppl/GSE144735%5Fprocessed%5FKUL3%5FCRC%5F10X%5Fraw%5FUMI%5Fcount%5Fmatrix%2Etxt%2Egz)), as well as the metadata file ([link](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144735/suppl/GSE144735%5Fprocessed%5FKUL3%5FCRC%5F10X%5Fannotation%2Etxt%2Egz)).
+
+**Colon_smillie** The data of this study was available at the [Single-Cell Portal](https://singlecell.broadinstitute.org/single_cell/study/SCP259/intra-and-inter-cellular-rewiring-of-the-human-colon-during-ulcerative-colitis#study-summary) and downloaded from the *Download* tab of the respective study. To download this study, it was necessary to create an account. All files were downloaded, with exception of those regarding tSNEs (*Epi.tsne.txt*, *Fib.tsne.txt*, *Imm.tsne.txt* ) and supplemental info (*file_supplemental_info.tsv*). The data was provided by the authors as 3 separate sub-datasets: epithelial (files: *Epi.barcodes2.tsv*, *Epi.genes.tsv*, *gene_sorted-Epi.matrix.mtx*), stromal (files: *Fib.barcodes2.tsv*, *Fib.genes.tsv*, *gene_sorted-Fib.matrix.mtx*), and immune (files: *Imm.barcodes2.tsv*, *Imm.genes.tsv*, *gene_sorted-Imm.matrix.mtx*). There was only one metadata file (*all.meta2.txt*), with all the metadata information.
