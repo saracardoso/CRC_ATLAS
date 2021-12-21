@@ -1,3 +1,168 @@
 # Quality Control
 
+Before bringing the datasets together, they were individually checked for quality control, to filter low quality cells and lowly expressed genes.
+
+Cells were kept if they followed all the following criteria:
+
+-   Nº UMIs $\ge$ 1 000
+-   250 $\le$ Nº Genes $\ge$ 6 000
+-   Complexity ($\frac{log_{10}(NºGenes)}{log_{10}(UMIs)}$) $\ge$ 0.8
+-   Percentage of Mitochondrial RNA $\le$ 20$\%$
+
+A gene was considered to be lowly expressed if:
+
+-   Nº UMIs equal to 0 in 10 or more cells
+
+
+```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
+library(ggraph)
+
+# CRC_Qian
+CRC_Qian_filtered_meta = read.csv('data/CRC_Qian_filtered_meta.csv', row.names=1)
+CRC_Qian_meta = read.csv('data/CRC_Qian_metadata.csv', row.names=1)
+# GSE132465
+#GSE132465_filtered_meta = read.csv('data/GSE132465_filtered_meta.csv', row.names=1)
+#GSE132465_meta = read.csv('data/GSE132465_metadata.csv', row.names=1)
+# GSE144735
+#GSE144735_filtered_meta = read.csv('data/GSE144735_filtered_meta.csv', row.names=1)
+#GSE144735_meta = read.csv('data/GSE144735_metadata.csv', row.names=1)
+# Colon_smillie19
+#Colon_smillie19_filtered_meta = read.csv('data/Colon_smillie19_filtered_meta.csv', row.names=1)
+#Colon_smillie19_meta = read.csv('data/Colon_smillie19_metadata.csv', row.names=1)
+# Before and After filtering merged datasets:
+#merge_before = read.csv('data/merge_before.csv', row.names=1)
+#merge_after = read.csv('data/merge_after.csv', row.names=1)
+```
+
+## CRC_Qian
+
+Original code files are [here](https://github.com/saracardoso/CRC_ATLAS/blob/master/0_initial_data_evaluation/GSE132465.R).
+
+### Read Data {.unnumbered}
+
+```{r eval=FALSE}
+# Paths for original data and metadata files gotten in step 1.1:
+GSE132465_data = paste(project_dir, 'original_datasets/GSE132465/data/data.txt', sep='/')
+GSE132465_metadata = paste(project_dir, 'original_datasets/GSE132465/metadata.txt', sep='/')
+
+# Read data to a seurat object:
+data_matrix = bigreadr::big_fread2(GSE132465_data)
+rownames(data_matrix) = data_matrix$Index
+data_matrix = data_matrix[,-1]
+GSE132465 = Seurat::CreateSeuratObject(counts=data_matrix, project='GSE132465')
+remove(data_matrix)
+invisible(gc())
+
+# Read metadata file:
+GSE132465_original_metadata = read.csv(GSE132465_metadata, row.names=1, header=TRUE)
+
+# Update metadata:
+colnames(GSE132465@meta.data) = c('sample', 'nUMI', 'nGene')
+GSE132465[['patient']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Patient']
+GSE132465[['sample_type']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Class']
+GSE132465[['original_annotation_1']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Cell_type']
+GSE132465[['original_annotation_2']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Cell_subtype']
+
+# Store original data as seurat file:
+SeuratDisk::SaveH5Seurat(GSE132465, paste(project_dir, 'original_datasets/GSE132465/original_data.h5Seurat', sep='/'))
+```
+
+
+### Generate Quality Metrics {.unnumbered}
+
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beginning of this section.
+
+
+[**1.**]{style="color: black;"} Percentage of mitochondrial RNA
+
+```{r eval=FALSE}
+features = grep(pattern='^MT-', x=rownames(GSE132465@assays$RNA@counts), value = TRUE)
+percent.featureset = colSums(as.matrix(Seurat::GetAssayData(GSE132465, assay='RNA', slot="counts")[features, , drop = FALSE]))/
+  GSE132465$nUMI * 100
+GSE132465[['percent.mitochondrial_RNA']] = percent.featureset
+```
+
+
+[**2.**]{style="color: black;"} Complexity
+
+```{r eval=FALSE}
+CRC_Qian[['log10.complexity']] = log10(CRC_Qian$nGene) / log10(CRC_Qian$nUMI)
+```
+
+### Filter cells and genes {.unnumbered}
+
+```{r eval=FALSE}
+# Filter out low quality cells:
+cells_keep = rownames(CRC_Qian@meta.data)[(CRC_Qian$nUMI >= 1000) &
+                                            (CRC_Qian$nGene >= 250) &
+                                            (CRC_Qian$nGene <= 6000) &
+                                            (CRC_Qian$log10.complexity > 0.80) &
+                                            (CRC_Qian$percent.mitochondrial_RNA <= 20)]
+filtered_seurat = subset(CRC_Qian, cells=cells_keep)
+
+# Filter out low-expressed genes:
+counts = Seurat::GetAssayData(object=filtered_seurat, slot="counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 10
+filtered_counts <- counts[keep_genes, ]
+
+# Creation of filtered dataset:
+CRC_Qian_filtered = Seurat::CreateSeuratObject(filtered_counts, meta.data=filtered_seurat@meta.data)
+```
+
+### Check QC Plots {.unnumbered}
+
+**Nº Cells per sample**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,5000))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,5000))
+
+before | after
+```
+
+
+```{r out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,5000))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,5000))
+
+#before | after
+patchwork::wrap_plots(list(before,after), ncol=2)
+```
+
+
+...
+
+## GSE132465
+
+...
+
+## GSE144735
+
+...
+
+## Colon_smillie
+
 ...
