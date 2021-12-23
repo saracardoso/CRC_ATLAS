@@ -21,17 +21,14 @@ library(ggraph)
 CRC_Qian_filtered_meta = read.csv('data/CRC_Qian_filtered_meta.csv', row.names=1)
 CRC_Qian_meta = read.csv('data/CRC_Qian_metadata.csv', row.names=1)
 # GSE132465
-#GSE132465_filtered_meta = read.csv('data/GSE132465_filtered_meta.csv', row.names=1)
-#GSE132465_meta = read.csv('data/GSE132465_metadata.csv', row.names=1)
+GSE132465_filtered_meta = read.csv('data/GSE132465_filtered_meta.csv', row.names=1)
+GSE132465_meta = read.csv('data/GSE132465_metadata.csv', row.names=1)
 # GSE144735
-#GSE144735_filtered_meta = read.csv('data/GSE144735_filtered_meta.csv', row.names=1)
-#GSE144735_meta = read.csv('data/GSE144735_metadata.csv', row.names=1)
+GSE144735_filtered_meta = read.csv('data/GSE144735_filtered_meta.csv', row.names=1)
+GSE144735_meta = read.csv('data/GSE144735_metadata.csv', row.names=1)
 # Colon_smillie19
-#Colon_smillie19_filtered_meta = read.csv('data/Colon_smillie19_filtered_meta.csv', row.names=1)
-#Colon_smillie19_meta = read.csv('data/Colon_smillie19_metadata.csv', row.names=1)
-# Before and After filtering merged datasets:
-#merge_before = read.csv('data/merge_before.csv', row.names=1)
-#merge_after = read.csv('data/merge_after.csv', row.names=1)
+Colon_smillie19_filtered_meta = read.csv('data/Colon_smillie19_filtered_meta.csv', row.names=1)
+Colon_smillie19_meta = read.csv('data/Colon_smillie19_metadata.csv', row.names=1)
 ```
 
 ## CRC_Qian
@@ -133,7 +130,7 @@ before | after
 ```
 
 
-```{r out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=sample, fill=sample)) + 
   ggplot2::geom_bar() + ggplot2::theme_classic() +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
@@ -153,16 +150,1984 @@ patchwork::wrap_plots(list(before,after), ncol=2)
 ```
 
 
-...
+**Nº UMIs per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+before | after
+```
+
+**Nº Detected genes per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+before | after
+```
+
+**Distribution of genes detected per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+**UMIs vs Genes**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+**Percentage of mitochondrial RNA per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.35)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.35)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.35)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.35)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+**Complexity**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(CRC_Qian@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(CRC_Qian_filtered@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(CRC_Qian_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+### Cell-Cycle Scoring {.unnumbered}
+
+Next, we assessed if the cell cycle is a major source of variation in the dataset. For more information on the cell-cycle markers used is available in section [Cell-Cycle Markers], at the end of the document.
+
+```{r eval=FALSE}
+# Load markers:
+cell_cycle_markers = paste(project_dir, 'utils/cycle_markers.rda', sep='/')
+load(cell_cycle_markers)
+
+# Normalize Data:
+CRC_Qian_filtered = Seurat::NormalizeData(CRC_Qian_filtered, assay='RNA')
+
+# Perform cell-cycle scoring:
+CRC_Qian_filtered = Seurat::CellCycleScoring(CRC_Qian_filtered, g2m.features=g2m_genes, s.features=s_genes, assay='RNA')
+```
+
+After scoring, we checked visually if the cell-cycle was a major source of variation:
+
+```{r eval=FALSE}
+# Perform PCA:
+CRC_Qian_filtered = Seurat::FindVariableFeatures(CRC_Qian_filtered, selection.method="vst", nfeatures=2000, verbose=FALSE)
+CRC_Qian_filtered = Seurat::ScaleData(CRC_Qian_filtered)
+CRC_Qian_filtered = Seurat::RunPCA(CRC_Qian_filtered)
+
+# Plot results:
+ccp1 = Seurat::DimPlot(CRC_Qian_filtered, reduction="pca", group.by='Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp2 = Seurat::DimPlot(CRC_Qian_filtered, reduction="pca", group.by='Phase', split.by = 'Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp1 / ccp2
+```
+
+```{r  fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::theme_minimal()
+ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::facet_wrap(facets = ggplot2::vars(Phase)) + ggplot2::theme_minimal()
+```
+
+Cell-cycle seems to **not** be a major source of variation.
+
+### Visualize dataset with authors' information {.unnumbered}
+
+```{r eval=FALSE}
+CRC_Qian_filtered = Seurat::RunUMAP(CRC_Qian_filtered, dims = 1:30, verbose = FALSE)
+
+# Authors' annotations:
+oa = Seurat::DimPlot(CRC_Qian_filtered, group.by='original_annotation', label=FALSE, label.size = 3) +
+  ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Sample names:
+s = Seurat::DimPlot(CRC_Qian_filtered, group.by='sample', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = Seurat::DimPlot(CRC_Qian_filtered, group.by='patient', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = Seurat::DimPlot(CRC_Qian_filtered, group.by='sample_type', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = Seurat::DimPlot(CRC_Qian_filtered, group.by='Phase', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = Seurat::FeaturePlot(CRC_Qian_filtered, reduction='umap', features=c('percent.mitochondrial_RNA')) +
+  ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
+
+```{r fig.width=10, fig.height=15, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+CRC_Qian_filtered_meta$sample = as.factor(CRC_Qian_filtered_meta$sample)
+# Authors' annotations:
+oa = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=original_annotation)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+# Sample names:
+s = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=patient)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample_type)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = ggplot2::ggplot(CRC_Qian_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
+
 
 ## GSE132465
 
-...
+
+Original code files are [here](https://github.com/saracardoso/CRC_ATLAS/blob/master/0_initial_data_evaluation/GSE132465.R).
+
+### Read Data {.unnumbered}
+
+```{r eval=FALSE}
+# Paths for original data and metadata files gotten in step 1.1:
+GSE132465_data = paste(project_dir, 'original_datasets/GSE132465/data/data.txt', sep='/')
+GSE132465_metadata = paste(project_dir, 'original_datasets/GSE132465/metadata.txt', sep='/')
+
+# Read data to a seurat object:
+data_matrix = bigreadr::big_fread2(GSE132465_data)
+rownames(data_matrix) = data_matrix$Index
+data_matrix = data_matrix[,-1]
+GSE132465 = Seurat::CreateSeuratObject(counts=data_matrix, project='GSE132465')
+remove(data_matrix)
+invisible(gc())
+
+# Read metadata file:
+GSE132465_original_metadata = read.csv(GSE132465_metadata, row.names=1, header=TRUE)
+
+# Update metadata:
+colnames(GSE132465@meta.data) = c('sample', 'nUMI', 'nGene')
+GSE132465[['patient']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Patient']
+GSE132465[['sample_type']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Class']
+GSE132465[['original_annotation_1']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Cell_type']
+GSE132465[['original_annotation_2']] = GSE132465_original_metadata[rownames(GSE132465@meta.data), 'Cell_subtype']
+
+# Store original data as seurat file:
+SeuratDisk::SaveH5Seurat(GSE132465, paste(project_dir, 'original_datasets/GSE132465/original_data.h5Seurat', sep='/'))
+```
+
+### Generate Quality Metrics {.unnumbered}
+
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this section.
+
+[**1.**]{style="color: black;"} Percentage of mitochondrial RNA
+
+```{r eval=FALSE}
+features = grep(pattern='^MT-', x=rownames(GSE132465@assays$RNA@counts), value = TRUE)
+percent.featureset = colSums(as.matrix(Seurat::GetAssayData(GSE132465, assay='RNA', slot="counts")[features, , drop = FALSE]))/
+  GSE132465$nUMI * 100
+GSE132465[['percent.mitochondrial_RNA']] = percent.featureset
+```
+
+[**2.**]{style="color: black;"} Complexity
+
+```{r eval=FALSE}
+GSE132465[['log10.complexity']] = log10(GSE132465$nGene) / log10(GSE132465$nUMI)
+```
+
+### Filter cells and genes {.unnumbered}
+
+```{r eval=FALSE}
+# Filter out low quality cells:
+cells_keep = rownames(GSE132465@meta.data)[(GSE132465$nUMI >= 1000) &
+                                             (GSE132465$nGene >= 250) &
+                                             (GSE132465$nGene <= 6000) &
+                                             (GSE132465$log10.complexity > 0.80) &
+                                             (GSE132465$percent.mitochondrial_RNA <= 20)]
+filtered_seurat = subset(GSE132465, cells=cells_keep)
+
+# Filter out low-expressed genes:
+counts = Seurat::GetAssayData(object=filtered_seurat, slot="counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 10
+filtered_counts <- counts[keep_genes, ]
+
+# Creation of filtered dataset:
+GSE132465_filtered = Seurat::CreateSeuratObject(filtered_counts, meta.data=filtered_seurat@meta.data)
+```
+
+### Check QC Plots {.unnumbered}
+
+**Nº Cells per sample**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,4000))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,4000))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,4000))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,4000))
+
+before | after
+```
+
+**Nº UMIs per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3))
+
+before | after
+```
+
+**Nº Detected genes per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+before | after
+```
+
+**Distribution of genes detected per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+**UMIs vs Genes**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+**Percentage of mitochondrial RNA per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+**Complexity**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE132465@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(GSE132465_filtered@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE132465_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+### Cell-Cycle Scoring {.unnumbered}
+
+Next, we assessed if the cell cycle is a major source of variation in the dataset. For more information on the cell-cycle markers used is available in section [Cell-Cycle Markers], at the end of the document.
+
+```{r eval=FALSE}
+# Load markers:
+cell_cycle_markers = paste(project_dir, 'utils/cycle_markers.rda', sep='/')
+load(cell_cycle_markers)
+
+# Normalize Data:
+GSE132465_filtered = Seurat::NormalizeData(GSE132465_filtered, assay='RNA')
+
+# Perform cell-cycle scoring:
+GSE132465_filtered = Seurat::CellCycleScoring(GSE132465_filtered, g2m.features=g2m_genes, s.features=s_genes, assay='RNA')
+```
+
+After scoring, we checked visually if the cell-cycle was a major source of variation:
+
+```{r eval=FALSE}
+# Perform PCA:
+GSE132465_filtered = Seurat::FindVariableFeatures(GSE132465_filtered, selection.method="vst", nfeatures=2000, verbose=FALSE)
+GSE132465_filtered = Seurat::ScaleData(GSE132465_filtered)
+GSE132465_filtered = Seurat::RunPCA(GSE132465_filtered)
+
+# Plot results:
+ccp1 = Seurat::DimPlot(GSE132465_filtered, reduction="pca", group.by='Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp2 = Seurat::DimPlot(GSE132465_filtered, reduction="pca", group.by='Phase', split.by = 'Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp1 / ccp2
+```
+
+```{r  fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::theme_minimal()
+ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::facet_wrap(facets = ggplot2::vars(Phase)) + ggplot2::theme_minimal()
+```
+
+Cell-cycle seems to **not** be a major source of variation.
+
+### Visualize dataset with authors' information {.unnumbered}
+
+```{r eval=FALSE}
+GSE132465_filtered = Seurat::RunUMAP(GSE132465_filtered, dims = 1:30, verbose = FALSE)
+
+# Authors' annotations:
+oa = Seurat::DimPlot(GSE132465_filtered, group.by='original_annotation_1', label=TRUE, label.size = 3) +
+  ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample names:
+s = Seurat::DimPlot(GSE132465_filtered, group.by='sample', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = Seurat::DimPlot(GSE132465_filtered, group.by='patient', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = Seurat::DimPlot(GSE132465_filtered, group.by='sample_type', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = Seurat::DimPlot(GSE132465_filtered, group.by='Phase', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = Seurat::FeaturePlot(GSE132465_filtered, reduction='umap', features=c('percent.mitochondrial_RNA')) +
+  ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
+
+```{r fig.width=10, fig.height=15, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+# Authors' annotations:
+oa = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=original_annotation_1)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+# Sample names:
+s = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=patient)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample_type)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = ggplot2::ggplot(GSE132465_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
 
 ## GSE144735
 
-...
+Original code files are [here](https://github.com/saracardoso/CRC_ATLAS/blob/master/0_initial_data_evaluation/GSE144735.R).
+
+### Read Data {.unnumbered}
+
+```{r eval=FALSE}
+# Paths for original data and metadata files gotten in step 1.1:
+GSE144735_data = paste(project_dir, 'original_datasets/GSE144735/data/data.txt', sep='/')
+GSE144735_metadata = paste(project_dir, 'original_datasets/GSE144735/metadata.txt', sep='/')
+
+# Read data to a seurat object:
+data_matrix = bigreadr::big_fread2(GSE144735_data)
+rownames(data_matrix) = data_matrix$Index
+data_matrix = data_matrix[,-1]
+GSE144735 = Seurat::CreateSeuratObject(counts=data_matrix, project='GSE144735')
+remove(data_matrix)
+invisible(gc())
+
+# Read metadata file:
+GSE144735_original_metadata = read.csv(GSE144735_metadata, row.names=1, header=TRUE)
+
+# Update metadata:
+colnames(GSE144735@meta.data) = c('sample', 'nUMI', 'nGene')
+GSE144735[['patient']] = GSE144735_original_metadata[rownames(GSE144735@meta.data), 'Patient']
+GSE144735[['sample_type']] = GSE144735_original_metadata[rownames(GSE144735@meta.data), 'Class']
+GSE144735[['sample_type']][GSE144735[['sample_type']]=='Tumor'] = 'Tumour Core'
+GSE144735[['sample_type']][GSE144735[['sample_type']]=='Border'] = 'Tumour Border'
+GSE144735[['sample_type']][GSE144735[['sample_type']]=='Normal'] = 'Normal Tissue'
+GSE144735[['original_annotation_1']] = GSE144735_original_metadata[rownames(GSE144735@meta.data), 'Cell_type']
+GSE144735[['original_annotation_2']] = GSE144735_original_metadata[rownames(GSE144735@meta.data), 'Cell_subtype']
+
+# Store original data as seurat file:
+SeuratDisk::SaveH5Seurat(GSE144735, paste(project_dir, 'original_datasets/GSE144735/original_data.h5Seurat', sep='/'))
+```
+
+### Generate Quality Metrics {.unnumbered}
+
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this section.
+
+[**1.**]{style="color: black;"} Percentage of mitochondrial RNA
+
+```{r eval=FALSE}
+features = grep(pattern='^MT-', x=rownames(GSE144735@assays$RNA@counts), value = TRUE)
+percent.featureset = colSums(as.matrix(Seurat::GetAssayData(GSE144735, assay='RNA', slot="counts")[features, , drop = FALSE]))/
+  GSE144735$nUMI * 100
+GSE144735[['percent.mitochondrial_RNA']] = percent.featureset
+```
+
+[**2.**]{style="color: black;"} Complexity
+
+```{r eval=FALSE}
+GSE144735[['log10.complexity']] = log10(GSE144735$nGene) / log10(GSE144735$nUMI)
+```
+
+### Filter cells and genes {.unnumbered}
+
+```{r eval=FALSE}
+# Filter out low quality cells:
+cells_keep = rownames(GSE144735@meta.data)[(GSE144735$nUMI >= 1000) &
+                                             (GSE144735$nGene >= 250) &
+                                             (GSE144735$nGene <= 6000) &
+                                             (GSE144735$log10.complexity > 0.80) &
+                                             (GSE144735$percent.mitochondrial_RNA <= 20)]
+filtered_seurat = subset(GSE144735, cells=cells_keep)
+
+# Filter out low-expressed genes:
+counts = Seurat::GetAssayData(object=filtered_seurat, slot="counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 10
+filtered_counts <- counts[keep_genes, ]
+
+# Creation of filtered dataset:
+GSE144735_filtered = Seurat::CreateSeuratObject(filtered_counts, meta.data=filtered_seurat@meta.data)
+```
+
+### Check QC Plots {.unnumbered}
+
+**Nº Cells per sample**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,3500))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,3500))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,3500))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,3500))
+
+before | after
+```
+
+**Nº UMIs per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,2.5))
+
+before | after
+```
+
+**Nº Detected genes per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+before | after
+```
+
+**Distribution of genes detected per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+**UMIs vs Genes**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+**Percentage of mitochondrial RNA per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.3)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.3)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.3)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.3)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+**Complexity**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(GSE144735@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(GSE144735_filtered@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(GSE144735_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,25)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+### Cell-Cycle Scoring {.unnumbered}
+
+Next, we assessed if the cell cycle is a major source of variation in the dataset. For more information on the cell-cycle markers used is available in section [Cell-Cycle Markers], at the end of the document.
+
+```{r eval=FALSE}
+# Load markers:
+cell_cycle_markers = paste(project_dir, 'utils/cycle_markers.rda', sep='/')
+load(cell_cycle_markers)
+
+# Normalize Data:
+GSE144735_filtered = Seurat::NormalizeData(GSE144735_filtered, assay='RNA')
+
+# Perform cell-cycle scoring:
+GSE144735_filtered = Seurat::CellCycleScoring(GSE144735_filtered, g2m.features=g2m_genes, s.features=s_genes, assay='RNA')
+```
+
+After scoring, we checked visually if the cell-cycle was a major source of variation:
+
+```{r eval=FALSE}
+# Perform PCA:
+GSE144735_filtered = Seurat::FindVariableFeatures(GSE144735_filtered, selection.method="vst", nfeatures=2000, verbose=FALSE)
+GSE144735_filtered = Seurat::ScaleData(GSE144735_filtered)
+GSE144735_filtered = Seurat::RunPCA(GSE144735_filtered)
+
+# Plot results:
+ccp1 = Seurat::DimPlot(GSE144735_filtered, reduction="pca", group.by='Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp2 = Seurat::DimPlot(GSE144735_filtered, reduction="pca", group.by='Phase', split.by = 'Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp1 / ccp2
+```
+
+```{r  fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::theme_minimal()
+ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::facet_wrap(facets = ggplot2::vars(Phase)) + ggplot2::theme_minimal()
+```
+
+Cell-cycle seems to **not** be a major source of variation.
+
+### Visualize dataset with authors' information {.unnumbered}
+
+```{r eval=FALSE}
+GSE144735_filtered = Seurat::RunUMAP(GSE144735_filtered, dims = 1:30, verbose = FALSE)
+
+# Authors' annotations:
+oa = Seurat::DimPlot(GSE144735_filtered, group.by='original_annotation_1', label=TRUE, label.size = 3) +
+  ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample names:
+s = Seurat::DimPlot(GSE144735_filtered, group.by='sample', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = Seurat::DimPlot(GSE144735_filtered, group.by='patient', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = Seurat::DimPlot(GSE144735_filtered, group.by='sample_type', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = Seurat::DimPlot(GSE144735_filtered, group.by='Phase', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = Seurat::FeaturePlot(GSE144735_filtered, reduction='umap', features=c('percent.mitochondrial_RNA')) +
+  ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
+
+```{r fig.width=10, fig.height=15, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+# Authors' annotations:
+oa = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=original_annotation_1)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+# Sample names:
+s = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=patient)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample_type)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = ggplot2::ggplot(GSE144735_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
 
 ## Colon_smillie
 
-...
+Original code files are [here](https://github.com/saracardoso/CRC_ATLAS/blob/master/0_initial_data_evaluation/Colon_smillie19.R).
+
+### Read Data {.unnumbered}
+
+As explained in section [Datasets Used], the dataset was made available by the authors in 3 separate sub-datasets (epithelial, stromal and immune). Therefore, the files were read and a simple merge of the three resulting *Seurat* objects was performed.
+
+Metadata was available in one single file, so no merge was necessary here.
+
+Lastly, as this is not a CRC dataset, only cells from samples of healthy individuals were kept.
+
+```{r eval=FALSE}
+# Paths for original data and metadata files gotten in step 1.1:
+Colon_smillie19_data_dir = paste(project_dir, 'original_datasets/Colon_smillie19', sep='/')
+Colon_smillie19_metadata = paste(project_dir, 'original_datasets/Colon_smillie19/metadata.txt', sep='/')
+
+# Read data to a seurat object:
+epithelial_seurat_data = Seurat::Read10X(data.dir=paste(Colon_smillie19_data_dir, 'epithelial', sep='/'), gene.column=1)
+epithelial_Colon_smillie19 = Seurat::CreateSeuratObject(counts=epithelial_seurat_data, project='Colon_smillie19_epithelial')
+invisible(gc())
+stromal_seurat_data = Seurat::Read10X(data.dir=paste(Colon_smillie19_data_dir, 'stromal', sep='/'), gene.column=1)
+stromal_Colon_smillie19 = Seurat::CreateSeuratObject(counts=stromal_seurat_data, project='Colon_smillie19_stromal')
+invisible(gc())
+immune_seurat_data = Seurat::Read10X(data.dir=paste(Colon_smillie19_data_dir, 'immune', sep='/'), gene.column=1)
+immune_Colon_smillie19 = Seurat::CreateSeuratObject(counts=immune_seurat_data, project='Colon_smillie19_immune')
+invisible(gc())
+remove(epithelial_seurat_data, stromal_seurat_data, immune_seurat_data)
+invisible(gc())
+
+# Merge into one dataset:
+Colon_smillie19 = merge(epithelial_Colon_smillie19, y=c(stromal_Colon_smillie19, immune_Colon_smillie19),
+                        add.cell.ids = NULL, project = "Colon_smillie19")
+remove(epithelial_Colon_smillie19, immune_Colon_smillie19, stromal_Colon_smillie19)
+invisible(gc())
+
+# Read metadata file:
+Colon_smillie19_original_metadata = read.table(Colon_smillie19_metadata, header=TRUE, sep='\t')[-1,]
+rownames(Colon_smillie19_original_metadata) = Colon_smillie19_original_metadata$NAME
+
+# Get only healthy individuals (unhealthy individuals are not CRC patients):
+healthy_cells = Colon_smillie19_original_metadata[Colon_smillie19_original_metadata$Health=='Healthy','NAME']
+Colon_smillie19 = subset(Colon_smillie19, cells = healthy_cells)
+invisible(gc())
+
+# Update metadata:
+Colon_smillie19@meta.data = Colon_smillie19@meta.data[,-1]
+colnames(Colon_smillie19@meta.data) = c('nUMI', 'nGene')
+Colon_smillie19[['sample']] = Colon_smillie19_original_metadata[rownames(Colon_smillie19@meta.data), 'Sample']
+Colon_smillie19[['patient']] = Colon_smillie19_original_metadata[rownames(Colon_smillie19@meta.data), 'Subject']
+Colon_smillie19[['sample_type']] = Colon_smillie19_original_metadata[rownames(Colon_smillie19@meta.data), 'Health']
+Colon_smillie19[['original_annotation_1']] = Colon_smillie19_original_metadata[rownames(Colon_smillie19@meta.data), 'Cluster']
+Colon_smillie19[['Location']] = Colon_smillie19_original_metadata[rownames(Colon_smillie19@meta.data), 'Location']
+
+# Store original data as seurat file:
+SeuratDisk::SaveH5Seurat(Colon_smillie19, paste(project_dir, 'original_datasets/Colon_smillie19/original_data.h5Seurat', sep='/'))
+```
+
+### Generate Quality Metrics {.unnumbered}
+
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this section.
+
+[**1.**]{style="color: black;"} Percentage of mitochondrial RNA
+
+```{r eval=FALSE}
+features = grep(pattern='^MT-', x=rownames(Colon_smillie19@assays$RNA@counts), value = TRUE)
+percent.featureset = colSums(as.matrix(Seurat::GetAssayData(Colon_smillie19, assay='RNA', slot="counts")[features, , drop = FALSE]))/
+  Colon_smillie19$nUMI * 100
+Colon_smillie19[['percent.mitochondrial_RNA']] = percent.featureset
+```
+
+[**2.**]{style="color: black;"} Complexity
+
+```{r eval=FALSE}
+Colon_smillie19[['log10.complexity']] = log10(Colon_smillie19$nGene) / log10(Colon_smillie19$nUMI)
+```
+
+### Filter cells and genes {.unnumbered}
+
+```{r eval=FALSE}
+# Filter out low quality cells:
+cells_keep = rownames(Colon_smillie19@meta.data)[(Colon_smillie19$nUMI >= 1000) &
+                                                   (Colon_smillie19$nGene >= 250) &
+                                                   (Colon_smillie19$nGene <= 6000) &
+                                                   (Colon_smillie19$log10.complexity > 0.80) &
+                                                   (Colon_smillie19$percent.mitochondrial_RNA <= 20)]
+filtered_seurat = subset(Colon_smillie19, cells=cells_keep)
+
+# Filter out low-expressed genes:
+counts = Seurat::GetAssayData(object=filtered_seurat, slot="counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 10
+filtered_counts <- counts[keep_genes, ]
+
+# Creation of filtered dataset:
+Colon_smillie19_filtered = Seurat::CreateSeuratObject(filtered_counts, meta.data=filtered_seurat@meta.data)
+```
+
+### Check QC Plots {.unnumbered}
+
+**Nº Cells per sample**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,5000))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,5000))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("Before") +
+  ggplot2::ylim(c(0,5000))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=sample, fill=sample)) + 
+  ggplot2::geom_bar() + ggplot2::theme_classic() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold"), legend.position = "none") +
+  ggplot2::ggtitle("After") +
+  ggplot2::ylim(c(0,5000))
+
+before | after
+```
+
+**Nº UMIs per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=nUMI, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab('Nº UMIs') +
+  ggplot2::ylab("Cell density") +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,3.5))
+
+before | after
+```
+
+**Nº Detected genes per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=nGene, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::theme_classic() + ggplot2::xlab('Nº Genes') + ggplot2::ylab('Density') +
+  ggplot2::scale_x_log10() + 
+  ggplot2::geom_vline(xintercept = 250) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,4))
+
+before | after
+```
+
+**Distribution of genes detected per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(y=log10(nGene), fill=sample)) + 
+  ggplot2::geom_boxplot() + 
+  ggplot2::theme_classic() +
+  ggplot2::theme(plot.title = ggplot2::element_text(hjust=0.5, face="bold")) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(2.4,3.8))
+
+before | after
+```
+
+**UMIs vs Genes**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=nUMI, y=nGene, color=percent.mitochondrial_RNA)) + 
+  ggplot2::geom_point() + 
+  ggplot2::scale_colour_gradient(low = "gray90", high = "black", limits=c(0,30)) +
+  ggplot2::stat_smooth(method=lm) +
+  ggplot2::scale_x_log10() + 
+  ggplot2::scale_y_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 1000) +
+  ggplot2::geom_hline(yintercept = 250) +
+  ggplot2::xlab('Nº UMIs') + ggplot2::ylab('Nº Genes') +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "bottom") +
+  ggplot2::ylim(c(0,7500)) + ggplot2::xlim(c(0,80000))
+
+before | after
+```
+
+**Percentage of mitochondrial RNA per cell**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=percent.mitochondrial_RNA, fill=sample)) + 
+  ggplot2::geom_density(alpha = 0.2) + 
+  ggplot2::scale_x_log10() + 
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 20) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,.4)) + ggplot2::xlim(c(0,30))
+
+before | after
+```
+
+**Complexity**
+
+```{r eval=FALSE}
+before = ggplot2::ggplot(Colon_smillie19@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered@meta.data, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+before = ggplot2::ggplot(Colon_smillie19_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('Before') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+after = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=log10.complexity, fill=sample)) +
+  ggplot2::geom_density(alpha = 0.2) +
+  ggplot2::theme_classic() +
+  ggplot2::geom_vline(xintercept = 0.8) +
+  ggplot2::ggtitle('After') +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ylim(c(0,30)) + ggplot2::xlim(c(.65,1))
+
+before | after
+```
+
+### Cell-Cycle Scoring {.unnumbered}
+
+Next, we assessed if the cell cycle is a major source of variation in the dataset. For more information on the cell-cycle markers used is available in section [Cell-Cycle Markers], at the end of the document.
+
+```{r eval=FALSE}
+# Load markers:
+cell_cycle_markers = paste(project_dir, 'utils/cycle_markers.rda', sep='/')
+load(cell_cycle_markers)
+
+# Normalize Data:
+Colon_smillie19_filtered = Seurat::NormalizeData(Colon_smillie19_filtered, assay='RNA')
+
+# Perform cell-cycle scoring:
+Colon_smillie19_filtered = Seurat::CellCycleScoring(Colon_smillie19_filtered, g2m.features=g2m_genes, s.features=s_genes, assay='RNA')
+```
+
+After scoring, we checked visually if the cell-cycle was a major source of variation:
+
+```{r eval=FALSE}
+# Perform PCA:
+Colon_smillie19_filtered = Seurat::FindVariableFeatures(Colon_smillie19_filtered, selection.method="vst", nfeatures=2000, verbose=FALSE)
+Colon_smillie19_filtered = Seurat::ScaleData(Colon_smillie19_filtered)
+Colon_smillie19_filtered = Seurat::RunPCA(Colon_smillie19_filtered)
+
+# Plot results:
+ccp1 = Seurat::DimPlot(Colon_smillie19_filtered, reduction="pca", group.by='Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp2 = Seurat::DimPlot(Colon_smillie19_filtered, reduction="pca", group.by='Phase', split.by = 'Phase', pt.size=1) + ggplot2::theme_minimal()
+ccp1 / ccp2
+```
+
+```{r  fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::theme_minimal()
+ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=PC_1, y=PC_2, color=Phase)) +
+  ggplot2::geom_point(size=.8) + ggplot2::facet_wrap(facets = ggplot2::vars(Phase)) + ggplot2::theme_minimal()
+```
+
+Cell-cycle seems to **not** be a major source of variation.
+
+### Visualize dataset with authors' information {.unnumbered}
+
+```{r eval=FALSE}
+Colon_smillie19_filtered = Seurat::RunUMAP(Colon_smillie19_filtered, dims = 1:30, verbose = FALSE)
+
+# Authors' annotations:
+oa = Seurat::DimPlot(Colon_smillie19_filtered, group.by='original_annotation', label=TRUE, label.size = 3) +
+  ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample names:
+s = Seurat::DimPlot(Colon_smillie19_filtered, group.by='sample', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = Seurat::DimPlot(Colon_smillie19_filtered, group.by='patient', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = Seurat::DimPlot(Colon_smillie19_filtered, group.by='sample_type', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = Seurat::DimPlot(Colon_smillie19_filtered, group.by='Phase', label.size = 3) +
+  ggplot2::theme(legend.text = ggplot2::element_text(size = 8)) +
+  ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = Seurat::FeaturePlot(Colon_smillie19_filtered, reduction='umap', features=c('percent.mitochondrial_RNA')) +
+  ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
+
+```{r fig.width=10, fig.height=15, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+# Authors' annotations:
+oa = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=original_annotation)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Authors' Annotations") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+# Sample names:
+s = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Patient names:
+p = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=patient)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Patient Names") +
+  ggplot2::theme_minimal() + Seurat::NoLegend()
+# Sample type:
+st = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=sample_type)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Sample Type") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Cell-Cycle Phase
+phase = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Cell-Cycle Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+# Percentage of mitochondrial RNA
+mito = ggplot2::ggplot(Colon_smillie19_filtered_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("Percentage of mitochondrial RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+(oa | s) / (p | st) / (phase | mito)
+```
