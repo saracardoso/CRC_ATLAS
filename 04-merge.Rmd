@@ -1,3 +1,24 @@
 # (PART) Integration {-}
 
 # Merge Dataset
+
+After analysing the quality of the different datasets individually, the original datasets were simply merged together prior to filtering low quality cells and lowly expressed genes. After merging and filtering, the datasets were then integrated to properly annotate the different cell-types.
+
+Original code files are [here](https://github.com/saracardoso/CRC_ATLAS/tree/master/1_merge).
+
+```{r eval=FALSE}
+# Load datasets separately:
+CRC_Qian = SeuratDisk::LoadH5Seurat(paste(project_dir, 'original_datasets/CRC_qian/original_data.h5Seurat', sep='/'))
+colnames(CRC_Qian@meta.data)[6] = 'original_annotation_1'
+CRC_Qian[['dataset']] = rep('CRC_Qian', dim(CRC_Qian@meta.data)[1])
+GSE132465 = SeuratDisk::LoadH5Seurat(paste(project_dir, 'original_datasets/GSE132465/original_data.h5Seurat', sep='/'))
+GSE132465[['dataset']] = rep('GSE132465', dim(GSE132465@meta.data)[1])
+GSE144735 = SeuratDisk::LoadH5Seurat(paste(project_dir, 'original_datasets/GSE144735/original_data.h5Seurat', sep='/'))
+GSE144735[['dataset']] = rep('GSE144735', dim(GSE144735@meta.data)[1])
+Colon_smillie19 = SeuratDisk::LoadH5Seurat(paste(project_dir, 'original_datasets/Colon_smillie19/original_data.h5Seurat', sep='/'))
+Colon_smillie19[['dataset']] = rep('Colon_smillie19', dim(Colon_smillie19@meta.data)[1])
+
+# Merge datasets in one:
+CRCatlas = merge(CRC_Qian, y = c(GSE132465, GSE144735, Colon_smillie19),
+                 add.cell.ids = c("CRC_Qian", "GSE132465", "GSE144735", "Colon_smillie19"), project = "CRCatlas")
+```
