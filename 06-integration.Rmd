@@ -1,1 +1,74 @@
 # Integration
+
+
+[**1.**]{style="color: black;"} Before starting integration, we needed to get the cell-cycle markers, as they were used again for the integration pipeline.
+
+```{r eval=FALSE}
+# Load markers:
+cell_cycle_markers = paste('data_documentation/cycle_markers.rda', sep='/')
+load(cell_cycle_markers)
+```
+
+[**2.**]{style="color: black;"} After that, the dataset created from the merge step was loaded and separated by dataset of origin. This is necessary to perform the integration of the different datasets.
+
+```{r eval=FALSE}
+datasets = Seurat::SplitObject(SeuratDisk::LoadH5Seurat(paste(project_dir, '1_merge/CRC.h5Seurat', sep='/')),
+                               split.by='dataset')
+invisible(gc())
+```
+
+[**3.**]{style="color: black;"} Datasets were then normalized individually and the top 2 000 most variable genes of each dataset calculated, so that the integration features could be selected
+
+```{r eval=FALSE}
+# Normalize and find variable features for each dataset:
+for(dts_name in names(datasets)) {
+  datasets[[dts_name]] <- Seurat::NormalizeData(datasets[[dts_name]])
+  datasets[[dts_name]] <- Seurat::FindVariableFeatures(datasets[[dts_name]], selection.method = "vst", nfeatures = 2000)
+  gc()
+}
+invisible(gc())
+
+# Select integration features:
+features <- Seurat::SelectIntegrationFeatures(object.list = datasets)
+invisible(gc())
+```
+
+[**4.**]{style="color: black;"} After that, each dataset's data was scaled, with regression of the difference between the S and G2M phases (so that we could still distinguish proliferative cells from those not proliferating), and percentage of mitochondrial RNA.
+
+PCA was performed to reduce dimensionality of datasets, in order to perform a faster and less computationally heavy integration.
+
+```{r eval=FALSE}
+for(dts_name in names(datasets)) {
+  message(dts_name)
+  datasets[[dts_name]] <- Seurat::CellCycleScoring(datasets[[dts_name]], g2m.features=g2m_genes, s.features=s_genes)
+  datasets[[dts_name]]$CC.Difference <-  datasets[[dts_name]]$S.Score - datasets[[dts_name]]$G2M.Score
+  datasets[[dts_name]] <- Seurat::ScaleData(datasets[[dts_name]], features = features, verbose = TRUE,
+                                            vars.to.regress=c('CC.Difference', 'percent.mitochondrial_RNA'))
+  datasets[[dts_name]] <- Seurat::RunPCA(datasets[[dts_name]], features = features, verbose = TRUE)
+}
+invisible(gc())
+```
+
+[**5.**]{style="color: black;"} Finally, the integration anchors were found and the data integrated
+
+```{r eval=FALSE}
+anchors <- Seurat::FindIntegrationAnchors(object.list=datasets, reference=c(2, 4), reduction = "rpca", dims = 1:50)
+invisible(gc())
+CRCatlas_integrated <- Seurat::IntegrateData(anchorset = anchors, dims = 1:50)
+invisible(gc())
+```
+
+[**6.**]{style="color: black;"} A new metadata variable was added, to distinguish cells from normal tissue and those from tumour tissue
+
+```{r eval=FALSE}
+CRCatlas_integrated[['state']] = CRCatlas_integrated$sample_type
+CRCatlas_integrated$state[CRCatlas_integrated$state=='Normal Tissue'] = 'Normal'
+CRCatlas_integrated$state[CRCatlas_integrated$state=='Tumour Border'] = 'Tumor'
+CRCatlas_integrated$state[CRCatlas_integrated$state=='Tumour Core'] = 'Tumor'
+```
+
+[**7.**]{style="color: black;"} The integrated dataset was saved
+
+```{r eval=FALSE}
+SeuratDisk::SaveH5Seurat(CRCatlas_integrated, paste(project_dir, '1_merge/CRC_integrated.h5Seurat', sep='/'))
+```
