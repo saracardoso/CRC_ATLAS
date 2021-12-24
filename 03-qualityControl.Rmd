@@ -67,7 +67,7 @@ SeuratDisk::SaveH5Seurat(GSE132465, paste(project_dir, 'original_datasets/GSE132
 
 ### Generate Quality Metrics {.unnumbered}
 
-Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beginning of this section.
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beginning of this chapter.
 
 
 [**1.**]{style="color: black;"} Percentage of mitochondrial RNA
@@ -591,7 +591,7 @@ SeuratDisk::SaveH5Seurat(GSE132465, paste(project_dir, 'original_datasets/GSE132
 
 ### Generate Quality Metrics {.unnumbered}
 
-Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this section.
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this chapter.
 
 [**1.**]{style="color: black;"} Percentage of mitochondrial RNA
 
@@ -1110,7 +1110,7 @@ SeuratDisk::SaveH5Seurat(GSE144735, paste(project_dir, 'original_datasets/GSE144
 
 ### Generate Quality Metrics {.unnumbered}
 
-Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this section.
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this chapter.
 
 [**1.**]{style="color: black;"} Percentage of mitochondrial RNA
 
@@ -1651,7 +1651,7 @@ SeuratDisk::SaveH5Seurat(Colon_smillie19, paste(project_dir, 'original_datasets/
 
 ### Generate Quality Metrics {.unnumbered}
 
-Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this section.
+Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of this chapter.
 
 [**1.**]{style="color: black;"} Percentage of mitochondrial RNA
 
