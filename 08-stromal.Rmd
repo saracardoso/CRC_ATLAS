@@ -1,1 +1,775 @@
 # Stromal Cells
+
+
+```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
+library(ggraph)
+library(patchwork)
+# CRC - Stromal
+stromal_elbowDF = read.csv('data/stromal_elbowDF.csv', row.names=1)
+stromal_meta = read.csv('data/stromal_meta.csv', row.names=1)
+stromal_clustree = readRDS('data/stromal_clustree.Rdata')
+stromal_Level_3_markers = read.csv('data/stromal_markers_3.csv', row.names=1)
+stromal_Level_2_markers = read.csv('data/stromal_markers_2.csv', row.names=1)
+stromal_Level_1_markers = read.csv('data/stromal_markers_1.csv', row.names=1)
+```
+
+To annotate the group of stromal cells, we started out by loading the seurat object of stromal cells.
+
+```{r eval=FALSE}
+Stromal = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Stromal/datasets/stromal_cells.h5Seurat', sep='/'))
+```
+
+
+## Find Clusters
+
+To find the clusters of stromal cells, a similar strategy to that used in the previous chapter ([6 Separating Cells into Big Cell-Types](#separating-cells-into-big-cell-types)) was employed.
+
+To find the clusters, we started by performing a PCA. This time, scale was not performed, as the data was already scaled previously.
+
+```{r eval=FALSE}
+Stromal = Seurat::RunPCA(Stromal, assay='integrated')
+invisible(gc())
+Seurat::DefaultAssay(Stromal)='integrated'
+```
+
+Then, we calculated the number of PCs to use when finding the clusters in the next steps, by finding where the principal components start to elbow, just like in the previous chapter ([6 Separating Cells into Big Cell-Types](#separating-cells-into-big-cell-types)).
+
+```{r eval=FALSE}
+# Calculate the first metric:
+pct = Stromal[["pca"]]@stdev /sum(Stromal[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+
+# Calculate the second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 14
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (14) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=14
+ggplot2::ggplot(data=stromal_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = stromal_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(stromal_elbowDF$pct[stromal_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+After finding the elbow, we determined the K-nearest neighbors using the calculated elbow and found the clusters. We used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+Stromal = Seurat::FindNeighbors(Stromal, dims=1:elbow)
+
+# Find clusters:
+Stromal = Seurat::FindClusters(Stromal, resolution=seq(0.1, 1, by=.1))
+
+# Run UMAP visualization:
+Stromal = Seurat::RunUMAP(Stromal, dims=1:elbow, reduction='pca')
+```
+
+
+## Check Quality of Clusters
+
+We explored if certain metrics and metadata are source of variation, which helps assessing the quality of the clustering.
+
+```{r eval=FALSE}
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(Stromal, metrics, ncol=2, with_dimplot=F, point_size=0.2)
+Seurat::DimPlot(Stromal, reduction="umap", group.by=c('dataset', 'Phase', 'state'), label=FALSE)
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+list_plots = list()
+
+list_plots[['nUMI']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nUMI)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nUMI") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['nGene']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nGene)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nGene") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['S.Score']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=S.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("S.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['G2M.Score']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=G2M.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("G2M.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['percent.mitochondrial_RNA']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("percent.mitochondrial_RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['dataset']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=dataset)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("dataset") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['Phase']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['state']] =  ggplot2::ggplot(stromal_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=state)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("state") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+
+patchwork::wrap_plots(list_plots, ncol=2)
+```
+
+
+## Choose Cluster Resolution
+
+As mentioned in the previous section, we used 10 different resolutions. We wanted to find the resolution that best separates the cells into clusters with interesting biological information. To do this, we used the [*clustree*](https://cran.r-project.org/web/packages/clustree/index.html) [@R-clustree] (v.0.4.3) package, which allows us to see how clusters from different resolutions are related to each other. The best resolution was chosen based on the stability of the clusters between different resolutions and the expression of cell-type markers.
+
+The *clustree* results, accompanied with UMAP visualizations for 4 different resolutions, is shown:
+
+```{r eval=FALSE}
+# 4. Use clustree:
+library(ggraph)
+clust_tree = clustree::clustree(Stromal, prefix='integrated_snn_res.')
+# Visualize 4 different resolutions:
+clusters_01 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_03 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.3', label=TRUE, label.size=6, pt.size=.2)
+clusters_05 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.5', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Stromal, reduction="umap", group.by='integrated_snn_res.0.7', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_03) / (clusters_05 | clusters_07)) | clust_tree
+```
+
+```{r fig.width=15, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+clusters = list()
+for(res in c('integrated_snn_res.0.1', 'integrated_snn_res.0.3', 'integrated_snn_res.0.5', 'integrated_snn_res.0.7')){
+  stromal_meta[,res] = factor(as.character(stromal_meta[,res]), levels=as.character(0:max(stromal_meta[,res])))
+  x = c()
+  y = c()
+  for(cluster in levels(stromal_meta[,res])){
+    x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta[,res])==cluster]))
+    y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta[,res])==cluster]))
+  }
+  clusters[[res]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=res)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(res) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta[,res]), color='black')
+}
+((clusters$integrated_snn_res.0.1 | clusters$integrated_snn_res.0.3) / (clusters$integrated_snn_res.0.5 | clusters$integrated_snn_res.0.7)) | stromal_clustree
+```
+
+The resolution that we ended up choosing was 0.5, after looking into the *clustree* results above, and the expression of gene markers that we show next.
+
+
+## Check Gene Expression
+
+The following markers were used to annotate the stromal cell-types:
+
+| Genes                                       | Cell-Types                           |
+|:--------------------------------------------|:-------------------------------------|
+| VWF, PLVAP, CDH5                            | Endothelial cells (ECs)              |
+| RGCC, RAMP3                                 | Tip-like vascular ECs                |
+| ACKR1, SELP                                 | Stalk-like vascular ECs              |
+| LYVE1, PROX1                                | Lymphatic ECs                        |
+| S100B, PLP1                                 | Enteric glia                         |
+| SYNPO2, CNN1, PDGFRB                        | Vascular Smooth Muscle cells (VSMCs) |
+| RGS5, ABCC9, KCNJ8                          | Pericytes                            |
+| TAGLN, ACTA2, ACTG2, MYH11, MYLK, DES       | Myofibroblasts                       |
+| COL1A1, COL1A2, COL6A1, COL6A2, COL3A1, DCN | Fibroblasts                          |
+| THY1, FAP                                   | Cancer Associated Fibroblasts (CAFs) |
+
+To assess the expression of these marker genes, we visualized their expression mapped into UMAP plots and violin plots.
+
+### ECs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_VWF', 'rna_PLVAP', 'rna_CDH5'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_VWF', 'rna_PLVAP', 'rna_CDH5'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_VWF', 'rna_PLVAP', 'rna_CDH5')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Tip-like Vascular ECs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_RGCC', 'rna_RAMP3'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_RGCC', 'rna_RAMP3'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_RGCC', 'rna_RAMP3')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Stalk-like Vascular ECs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_ACKR1', 'rna_SELP'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_ACKR1', 'rna_SELP'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_ACKR1', 'rna_SELP')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Lymphatic ECs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_LYVE1', 'rna_PROX1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_LYVE1', 'rna_PROX1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_LYVE1', 'rna_PROX1')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Enteric glia
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_S100B', 'rna_PLP1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_S100B', 'rna_PLP1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_S100B', 'rna_PLP1')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### VSMCs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_SYNPO2', 'rna_CNN1', 'rna_PDGFRB'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_SYNPO2', 'rna_CNN1', 'rna_PDGFRB'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_SYNPO2', 'rna_CNN1', 'rna_PDGFRB')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Pericytes markers
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_RGS5', 'rna_ABCC9', 'rna_KCNJ8'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_RGS5', 'rna_ABCC9', 'rna_KCNJ8'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_RGS5', 'rna_ABCC9', 'rna_KCNJ8')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Myofibroblasts
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK', 'rna_DES'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK', 'rna_DES'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=30, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_TAGLN', 'rna_ACTA2', 'rna_ACTG2', 'rna_MYH11', 'rna_MYLK', 'rna_DES')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Fibroblasts
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=30, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_COL1A1', 'rna_COL1A2', 'rna_COL6A1', 'rna_COL6A2', 'rna_COL3A1', 'rna_DCN')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### CAFs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Stromal, reduction='umap', features=c('rna_THY1', 'rna_FAP'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Stromal, c('rna_THY1', 'rna_FAP'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(stromal_meta$integrated_snn_res.0.5)){
+  x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+  y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta$integrated_snn_res.0.5)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_THY1', 'rna_FAP')){
+  umaps[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta$integrated_snn_res.0.5), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='integrated_snn_res.0.5', y=gene,
+                                                                   fill='integrated_snn_res.0.5')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(stromal_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+
+## Final Annotation
+
+Looking into the expression of genes from the previous point, the following annotations were made:
+
+| Clusters | Annotation_Level_3      | Annotation_Level_2      | Annotation_Level_1 |
+|:---------|:------------------------|:------------------------|:-------------------|
+| 0        | Fibroblasts_1           | Fibroblasts             | Fibroblasts        |
+| 2        | Fibroblasts_2           | Fibroblasts             | Fibroblasts        |
+| 3        | Fibroblasts_3           | Fibroblasts             | Fibroblasts        |
+| 4        | Fibroblasts_4           | Fibroblasts             | Fibroblasts        |
+| 13       | Myofibroblasts          | Myofibroblasts          | Myofibroblasts     |
+| 1, 10    | CAFs_1                  | CAFs                    | CAFs               |
+| 12       | CAFs_2                  | CAFs                    | CAFs               |
+| 5        | Pericytes               | Pericytes               | Pericytes          |
+| 6, 8, 15 | Tip-like vascular ECs   | Tip-like vascular ECs   | Vascular ECs       |
+| 7        | Stalk-like vascular ECs | Stalk-like vascular ECs | Vascular ECs       |
+| 14       | Lymphatic ECs           | Lymphatic ECs           | Lymphatic ECs      |
+| 9        | Enteric glia cells      | Enteric glia cells      | Enteric glia cells |
+| 11       | VSMCs                   | VSMCs                   | VSMCs              |
+
+The annotations were stored in the metadata of the seurat object, with the variable names corresponding to the columns in the previous table:
+
+```{r eval=FALSE}
+# Annotation level 3:
+Stromal[['Annotation_Level_3']] = rep('', length(Stromal$integrated_snn_res.0.5))
+fib1_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='0']
+Stromal@meta.data[fib1_cells, 'Annotation_Level_3'] = 'Fibroblasts_1'
+cafs1_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5%in%c('1', '10')]
+Stromal@meta.data[cafs1_cells, 'Annotation_Level_3'] = 'CAFs_1'
+fib2_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='2']
+Stromal@meta.data[fib2_cells, 'Annotation_Level_3'] = 'Fibroblasts_2'
+fib3_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='3']
+Stromal@meta.data[fib3_cells, 'Annotation_Level_3'] = 'Fibroblasts_3'
+fib4_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='4']
+Stromal@meta.data[fib4_cells, 'Annotation_Level_3'] = 'Fibroblasts_4'
+pericytes_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='5']
+Stromal@meta.data[pericytes_cells, 'Annotation_Level_3'] = 'Pericytes'
+tip_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5%in%c('6', '8', '15')]
+Stromal@meta.data[tip_cells, 'Annotation_Level_3'] = 'Tip-like vascular ECs'
+stalk_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='7']
+Stromal@meta.data[stalk_cells, 'Annotation_Level_3'] = 'Stalk-like vascular ECs'
+enteric_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='9']
+Stromal@meta.data[enteric_cells, 'Annotation_Level_3'] = 'Enteric glia cells'
+vsmcs_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='11']
+Stromal@meta.data[vsmcs_cells, 'Annotation_Level_3'] = 'VSMCs'
+cafs2_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='12']
+Stromal@meta.data[cafs2_cells, 'Annotation_Level_3'] = 'CAFs_2'
+myofibroblasts_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='13']
+Stromal@meta.data[myofibroblasts_cells, 'Annotation_Level_3'] = 'Myofibroblasts'
+lymphatic_cells = rownames(Stromal@meta.data)[Stromal$integrated_snn_res.0.5=='14']
+Stromal@meta.data[lymphatic_cells, 'Annotation_Level_3'] = 'Lymphatic ECs'
+
+# Annotation level 2:
+Stromal[['Annotation_Level_2']] = as.character(Stromal$Annotation_Level_3)
+Stromal@meta.data[Stromal$Annotation_Level_3%in%c('Fibroblasts_1', 'Fibroblasts_2', 'Fibroblasts_3', 'Fibroblasts_4'),
+                  'Annotation_Level_2'] = 'Fibroblasts'
+Stromal@meta.data[Stromal$Annotation_Level_3%in%c('CAFs_1', 'CAFs_2'), 'Annotation_Level_2'] = 'CAFs'
+
+# Annotation level 1:
+Stromal[['Annotation_Level_1']] = as.character(Stromal$Annotation_Level_2)
+Stromal@meta.data[Stromal$Annotation_Level_2%in%c('Tip-like vascular ECs', 'Stalk-like vascular ECs'), 'Annotation_Level_1'] = 'Vascular ECs'
+
+# Annotation level 0:
+Stromal[['Annotation_Level_0']] = factor(rep('Stromal cells', dim(Stromal@meta.data)[1]))
+
+# Remove [integrated...] metadata variables
+Stromal@meta.data = Stromal@meta.data[, !colnames(Stromal@meta.data) %in%
+                                      c(grep('^in', colnames(Stromal@meta.data), value=T), 'seurat_clusters')]
+```
+
+UMAP visualizations with cells coloured by the new annotations:
+
+```{r eval=FALSE}
+Seurat::DimPlot(Stromal, reduction="umap", group.by='Annotation_Level_3', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Stromal, reduction="umap", group.by='Annotation_Level_2', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Stromal, reduction="umap", group.by='Annotation_Level_1', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+```
+
+```{r fig.width=8, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+stromal_anots = list()
+for(level in c('Annotation_Level_1', 'Annotation_Level_2', 'Annotation_Level_3')){
+  stromal_meta[,level] = factor(as.character(stromal_meta[,level]), levels=unique(stromal_meta[,level]))
+  x = c()
+  y = c()
+  for(cluster in levels(stromal_meta[,level])){
+    x = c(x, mean(stromal_meta$UMAP_1[as.character(stromal_meta[,level])==cluster]))
+    y = c(y, mean(stromal_meta$UMAP_2[as.character(stromal_meta[,level])==cluster]))
+  }
+  stromal_anots[[level]] = ggplot2::ggplot(stromal_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=level)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(level) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(stromal_meta[,level]), color='black')
+}
+patchwork::wrap_plots(stromal_anots, ncol=1)
+```
+
+
+## Markers of the Cell-Type Annotations
+
+### Annotation level 3
+
+```{r eval=FALSE}
+Seurat::Idents(Stromal) = 'Annotation_Level_3'
+Stromal_Level_3_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Stromal_Level_3_markers, paste(project_dir, '2_annotation/results_Stromal/markers/markers_Level_3.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Stromal_Level_3_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(stromal_Level_3_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+### Annotation level 2
+
+```{r eval=FALSE}
+Seurat::Idents(Stromal) = 'Annotation_Level_2'
+Stromal_Level_2_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Stromal_Level_2_markers, paste(project_dir, '2_annotation/results_Stromal/markers/markers_Level_2.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Stromal_Level_2_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(stromal_Level_2_markers[,c(6,7, 1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+### Annotation level 1
+
+```{r eval=FALSE}
+Seurat::Idents(Stromal) = 'Annotation_Level_1'
+Stromal_Level_1_markers = Seurat::FindAllMarkers(Stromal, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Stromal_Level_1_markers, paste(project_dir, '2_annotation/results_Stromal/markers/markers_Level_1.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Stromal_Level_1_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(stromal_Level_1_markers[,c(6,7, 1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+## Save Data
+
+The stromal dataset with the new annotations was stored. It will be necessary for annotation purposes at the end of the pipeline:
+
+```{r eval=FALSE}
+# Save Seurat object
+SeuratDisk::SaveH5Seurat(Stromal, paste(project_dir, '2_annotation/results_Stromal/datasets/Stromal_finalAnnots.h5Seurat', sep='/'))
+```
