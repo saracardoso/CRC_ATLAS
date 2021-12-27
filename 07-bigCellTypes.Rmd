@@ -1,0 +1,618 @@
+# (PART) Cell-Type Annotation {-}
+
+```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
+library(ggraph)
+library(patchwork)
+# CRC - Big Groups
+bigGroups_elbowDF = read.csv('data/bigGroups_elbowDF.csv', row.names=1)
+bigGroups_meta = read.csv('data/bigGroups_meta.csv', row.names=1)
+```
+
+# Separating Cells into Big Cell-Types
+
+We started by separating the cells into 5 big groups of cell-types: Epithelial, Stromal, Myeloid, B- and T- cells. The cells from each of these groups were further sub-clustered individually to obtain more detailed annotations.
+
+In general, to perform cell annotation, we evaluated the RNA counts expression of certain genes, known to be markers of certain cell-types, on clusters of cells obtained using the integrated data. We detail all the pipeline for each of the big groups in the following chapters.
+
+So, first, we loaded the integrated seurat object:
+
+```{r eval=FALSE}
+CRCatlas_integrated = SeuratDisk::LoadH5Seurat(paste(project_dir, '1_merge/CRC_integrated.h5Seurat', sep='/'))
+```
+
+## Find Clusters
+
+To find the clusters, we first prepared the data by scaling the integrated data and ran a PCA.
+
+```{r eval=FALSE}
+CRCatlas_integrated = Seurat::ScaleData(CRCatlas_integrated, assay='integrated')
+CRCatlas_integrated = Seurat::RunPCA(CRCatlas_integrated, assay='integrated')
+invisible(gc())
+```
+
+Then, we calculated the number of PCs to use when finding the clusters in the next steps. For this, we used a quantitative approach to calculate where the principal components start to elbow. This 'elbow' is usually the number of PCs that explain the majority of the variation in the data. We calculated this elbow by taking the smallest PC of:
+
+-   The PC where the principal components contribute individually to only 5% of standard deviation and cumulatively to 90%;
+
+-   The PC where the percent change in variation between the consecutive PCs is less than 0.1%.
+
+```{r eval=FALSE}
+# Calculate the first metric:
+pct = CRCatlas_integrated[["pca"]]@stdev /sum(CRCatlas_integrated[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+
+# Calculate the second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 15
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (15) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=15
+ggplot2::ggplot(data=bigGroups_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = bigGroups_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(bigGroups_elbowDF$pct[bigGroups_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+After finding the elbow, we determined the K-nearest neighbors using the calculated elbow and found the clusters.
+
+We used a small resolution (0.1) to find the clusters, as the first objective was to find the 5 big groups of cell-types mentioned before.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+CRCatlas_integrated = Seurat::FindNeighbors(CRCatlas_integrated, dims=1:elbow)
+
+# Find clusters:
+CRCatlas_integrated = Seurat::FindClusters(CRCatlas_integrated, resolution = 0.1)
+
+# Run UMAP visualization:
+CRCatlas_integrated = Seurat::RunUMAP(CRCatlas_integrated, dims=1:elbow, reduction='pca')
+```
+
+UMAP visualization with cells coloured by the clusters found in this step:
+
+```{r eval=FALSE}
+Seurat::DimPlot(CRCatlas_integrated, reduction="umap", group.by=c('integrated_snn_res.0.1'), label=FALSE)
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+bigGroups_meta$integrated_snn_res.0.1 = factor(as.character(bigGroups_meta$integrated_snn_res.0.1),
+                                               levels=as.character(0:max(bigGroups_meta$integrated_snn_res.0.1)))
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=integrated_snn_res.0.1)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("integrated_snn_res.0.1") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+```
+
+
+## Check Quality of Clusters
+
+We explored if certain metrics are source of variation between clusters, which helps assessing the quality of the clusters
+
+```{r eval=FALSE}
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(CRCatlas_integrated, metrics, ncol=2, with_dimplot=F, point_size=0.2)
+```
+
+```{r fig.width=10, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+list_plots = list()
+
+list_plots[['nUMI']] =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nUMI)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nUMI") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['nGene']] =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nGene)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nGene") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['S.Score']] =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=S.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("S.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['G2M.Score']] =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=G2M.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("G2M.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['percent.mitochondrial_RNA']] =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("percent.mitochondrial_RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+patchwork::wrap_plots(list_plots, ncol=2)
+```
+
+We also looked into other information to see if they were source of variation between clusters
+
+```{r eval=FALSE}
+Seurat::DimPlot(CRCatlas_integrated, reduction="umap", group.by=c('dataset', 'Phase', 'state'), label=FALSE)
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+dataset =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=dataset)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("dataset") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+Phase =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+state =  ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=state)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("state") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+patchwork::wrap_plots(list(dataset, Phase, state), ncol=2)
+```
+
+## Check Gene Expression
+
+Next, we explored the expression of marker genes to do the annotation of the cells into the big cell-types mentioned (Epithelial, Stromal, Myeloid, B- and T- cells).
+
+The following markers were used:
+
+| Genes         | Cell-Types            | Big Cell-Types   |
+|:--------------|:----------------------|:-----------------|
+| EPCAM         | Epithelial cells      | Epithelial cells |
+| S100B         | Enteric Glia          | Stromal cells    |
+| COL1A1        | Fibroblasts           | Stromal cells    |
+| VWF, ENG      | Endothelial cells     | Stromal cells    |
+| CD14, FCGR3A  | Monocytes             | Myeloid cells    |
+| FCER1A, GZMB  | Dendritic cells (DCs) | Myeloid cells    |
+| TPSAB1, TPSB2 | Mast cells            | Myeloid cells    |
+| CD79A, MZB1   | Bcells                | Bcells           |
+| CD3D          | Tcells                | Tcells           |
+
+To assess the expression of these marker genes, we visualized their expression mapped into UMAP plots and violin plots.
+
+### Epithelial
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_EPCAM'), label=TRUE) +
+  ggplot2::ggtitle("EPCAM") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_EPCAM')) +
+  ggplot2::labs(x='', y='', title='EPCAM') + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_EPCAM)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("EPCAM") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_EPCAM, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='EPCAM') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_EPCAM)))
+
+umap | vln
+```
+
+### Enteric Glia
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_S100B'), label=TRUE) +
+  ggplot2::ggtitle("S100B") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_S100B')) +
+  ggplot2::labs(x='', y='', title='S100B') + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_S100B)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("S100B") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_S100B, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='S100B') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_S100B)))
+
+umap | vln
+```
+
+### Fibroblast
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_COL1A1'), label=TRUE) +
+  ggplot2::ggtitle("COL1A1") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_COL1A1')) +
+  ggplot2::labs(x='', y='', title='COL1A1') + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_COL1A1)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("COL1A1") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_COL1A1, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='COL1A1') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_COL1A1)))
+
+umap | vln
+```
+
+### Endothelial
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_VWF', 'rna_ENG'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_VWF', 'rna_ENG'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap_vwf = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_VWF)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("VWF") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+umap_eng = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_ENG)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("ENG") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln_vwf = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_VWF, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='VWF') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_VWF)))
+vln_eng = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_ENG, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='ENG') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_ENG)))
+
+(umap_vwf | vln_vwf) / (umap_eng | vln_eng)
+```
+
+### Monocytes
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_CD14', 'rna_FCGR3A'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_CD14', 'rna_FCGR3A'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap_cd14 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_CD14)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("CD14") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+umap_fcgr3a = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_FCGR3A)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("FCGR3A") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln_cd14 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_CD14, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='CD14') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_CD14)))
+vln_fcgr3a = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_FCGR3A, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='FCGR3A') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_FCGR3A)))
+
+(umap_cd14 | vln_cd14) / (umap_fcgr3a | vln_fcgr3a)
+```
+
+### DCs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_FCER1A', 'rna_GZMB'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_FCER1A', 'rna_GZMB'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap_fcer1a = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_FCER1A)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("FCER1A") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+umap_gzmb = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_GZMB)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("GZMB") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln_fcer1a = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_FCER1A, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='FCER1A') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_FCER1A)))
+vln_gzmb = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_GZMB, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='GZMB') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_GZMB)))
+
+(umap_fcer1a | vln_fcer1a) / (umap_gzmb | vln_gzmb)
+```
+
+### Mast cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_TPSAB1', 'rna_TPSB2'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_TPSAB1', 'rna_TPSB2'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap_tpsab1 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_TPSAB1)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("TPSAB1") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+umap_tpsb2 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_TPSB2)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("TPSB2") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln_tpsab1 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_TPSAB1, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='TPSAB1') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_TPSAB1)))
+vln_tpsb2 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_TPSB2, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='TPSB2') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_TPSB2)))
+
+(umap_tpsab1 | vln_tpsab1) / (umap_tpsb2 | vln_tpsb2)
+```
+
+### Bcells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_CD79A', 'rna_MZB1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_CD79A', 'rna_MZB1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap_cd79a = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_CD79A)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("CD79A") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+umap_mzb1 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_MZB1)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("MZB1") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln_cd79a = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_CD79A, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='CD79A') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_CD79A)))
+vln_mzb1 = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_MZB1, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='MZB1') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_MZB1)))
+
+(umap_cd79a | vln_cd79a) / (umap_mzb1 | vln_mzb1)
+```
+
+### Tcells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(CRCatlas_integrated, reduction='umap', features=c('rna_CD3D'), label=TRUE) +
+  ggplot2::ggtitle("CD3D") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(CRCatlas_integrated, c('rna_CD3D')) +
+  ggplot2::labs(x='', y='', title='CD3D') + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umap = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=rna_CD3D)) +
+  ggplot2::geom_point(size=.6) + ggplot2::ggtitle("CD3D") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$integrated_snn_res.0.1), color='black')
+
+vln = ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=integrated_snn_res.0.1, y=rna_CD3D, fill=integrated_snn_res.0.1)) +
+  ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+  ggplot2::labs(x='', y='', title='CD3D') + ggplot2::ylim(c(0,max(bigGroups_meta$rna_CD3D)))
+
+umap | vln
+```
+
+## Final Annotation
+
+Looking into the expression of genes, the following annotations were made for the groups of big cell-types:
+
+| Clusters        | Big Cell-Type    |
+|:----------------|:-----------------|
+| 1, 5, 9, 13     | Epithelial cells |
+| 3, 6, 7, 10, 11 | Stromal cells    |
+| 2, 12           | Myeloid cells    |
+| 4, 8            | Bcells           |
+| 0               | Tcells           |
+
+The annotations were stored in the metadata of the seurat object, with the variable name 'Level_0':
+
+```{r eval=FALSE}
+CRCatlas_integrated[['Level_0']] = as.character(CRCatlas_integrated$integrated_snn_res.0.1)
+CRCatlas_integrated$Level_0[CRCatlas_integrated$Level_0=='0'] = 'Tcells'
+CRCatlas_integrated$Level_0[CRCatlas_integrated$Level_0%in%c('4', '8')] = 'Bcells'
+CRCatlas_integrated$Level_0[CRCatlas_integrated$Level_0%in%c('2', '12')] = 'Myeloid cells'
+CRCatlas_integrated$Level_0[CRCatlas_integrated$Level_0%in%c('3', '6', '7', '10', '11')] = 'Stromal cells'
+CRCatlas_integrated$Level_0[CRCatlas_integrated$Level_0%in%c('1', '5', '9', '13')] = 'Epithelial cells'
+```
+
+UMAP visualization with cells coloured by the new annotations:
+
+```{r eval=FALSE}
+Seurat::DimPlot(CRCatlas_integrated, reduction="umap", group.by='Level_0', label=FALSE, label.size=6) +
+  ggplot2::ggtitle("Big Cell-Types") + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+bigGroups_meta$Level_0 = factor(as.character(bigGroups_meta$Level_0), levels=unique(bigGroups_meta$Level_0))
+
+x = c()
+y = c()
+for(cluster in levels(bigGroups_meta$Level_0)){
+  x = c(x, mean(bigGroups_meta$UMAP_1[as.character(bigGroups_meta$Level_0)==cluster]))
+  y = c(y, mean(bigGroups_meta$UMAP_2[as.character(bigGroups_meta$Level_0)==cluster]))
+}
+ggplot2::ggplot(bigGroups_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Level_0)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("Big Cell-Types") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(bigGroups_meta$Level_0), color='black')
+```
+
+## Save Data
+
+The integrated dataset with the new annotations was stored. It will be necessary for annotation purposes at the end of the pipeline:
+
+```{r eval=FALSE}
+# Store integrated CRCatlas for annotation purposes at the end of the pipeline:
+SeuratDisk::SaveH5Seurat(CRCatlas_integrated, paste(project_dir, '2_annotation/results_globalAnnotation/datasets/CRC_annotations.h5Seurat', sep='/'))
+```
+
+Then, the dataset was subseted according to the new annotations, so that each group could be further individually annotated. The resulting sub-datasets were stored.
+
+```{r eval=FALSE}
+Seurat::DefaultAssay(CRCatlas_integrated) = 'RNA'
+CRCatlas_integrated@meta.data = CRCatlas_integrated@meta.data[, !colnames(CRCatlas_integrated@meta.data) %in%
+                                                                c('integrated_snn_res.0.1', 'seurat_clusters')]
+
+# Epithelial cells:
+epithelial_cells = subset(CRCatlas_integrated, cells=rownames(CRCatlas_integrated[[]])[CRCatlas_integrated$Level_0=='Epithelial cells'])
+SeuratDisk::SaveH5Seurat(epithelial_cells, paste(project_dir, '/2_annotation/results_Epithelial/datasets/epithelial_cells.h5Seurat', sep='/'))
+
+# Stromal cells:
+stromal_cells = subset(CRCatlas_integrated, cells=rownames(CRCatlas_integrated[[]])[CRCatlas_integrated$Level_0=='Stromal cells'])
+SeuratDisk::SaveH5Seurat(stromal_cells, paste(project_dir, '/2_annotation/results_Stromal/datasets/stromal_cells.h5Seurat', sep='/'))
+
+# Myeloid cells:
+myeloid_cells = subset(CRCatlas_integrated, cells=rownames(CRCatlas_integrated[[]])[CRCatlas_integrated$Level_0=='Myeloid cells'])
+SeuratDisk::SaveH5Seurat(myeloid_cells, paste(project_dir, '/2_annotation/results_Myeloid/datasets/myeloid_cells.h5Seurat', sep='/'))
+
+# Bcells:
+Bcells = subset(CRCatlas_integrated, cells=rownames(CRCatlas_integrated[[]])[CRCatlas_integrated$Level_0=='Bcells'])
+SeuratDisk::SaveH5Seurat(Bcells, paste(project_dir, '/2_annotation/results_Bcells/datasets/Bcells.h5Seurat', sep='/'))
+
+# Tcells:
+Tcells = subset(CRCatlas_integrated, cells=rownames(CRCatlas_integrated[[]])[CRCatlas_integrated$Level_0=='Tcells'])
+SeuratDisk::SaveH5Seurat(Tcells, paste(project_dir, '/2_annotation/results_Tcells/datasets/Tcells.h5Seurat', sep='/'))
+```
+
+
