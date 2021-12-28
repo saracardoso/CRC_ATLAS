@@ -1,3 +1,921 @@
 # Myeloid Cells
 
-...
+```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
+library(ggraph)
+library(patchwork)
+# CRC - Myeloid
+myeloid_elbowDF = read.csv('data/myeloid_elbowDF.csv', row.names=1)
+myeloid_meta = read.csv('data/myeloid_meta.csv', row.names=1)
+myeloid_clustree = readRDS('data/myeloid_clustree.Rdata')
+monomacro_elbowDF = read.csv('data/monomacro_elbowDF.csv', row.names=1)
+monomacro_meta = read.csv('data/monomacro_meta.csv', row.names=1)
+monomacro_clustree = readRDS('data/monomacro_clustree.Rdata')
+myeloid_Level_2_markers = read.csv('data/myeloid_markers_2.csv', row.names=1)
+myeloid_Level_1_markers = read.csv('data/myeloid_markers_1.csv', row.names=1)
+```
+
+To annotate the group of myeloid cells, we started out by loading the seurat object of myeloid cells.
+
+```{r eval=FALSE}
+Myeloid = SeuratDisk::LoadH5Seurat(paste(project_dir, '/2_annotation/results_Myeloid/datasets/myeloid_cells.h5Seurat', sep='/'))
+```
+
+## Find Clusters
+
+To find the clusters of myeloid cells, we started by performing a PCA. Like with stromal cells, scale was not performed, as the data was already scaled previously.
+
+```{r eval=FALSE}
+Myeloid = Seurat::RunPCA(Myeloid, assay='integrated')
+invisible(gc())
+Seurat::DefaultAssay(Myeloid)='integrated'
+```
+
+Then, we calculated the number of PCs to use when finding the clusters in the next steps, by finding where the principal components start to elbow.
+
+```{r eval=FALSE}
+# Calculate the first metric:
+pct = Myeloid[["pca"]]@stdev /sum(Myeloid[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+
+# Calculate the second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 12
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (12) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=12
+ggplot2::ggplot(data=myeloid_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = myeloid_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(myeloid_elbowDF$pct[myeloid_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+After finding the elbow, we determined the K-nearest neighbours using the calculated elbow and found the clusters. Again, we used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+Myeloid = Seurat::FindNeighbors(Myeloid, dims=1:elbow)
+
+# Find clusters:
+Myeloid = Seurat::FindClusters(Myeloid, resolution=seq(0.1, 1, by=.1))
+
+# Run UMAP visualization:
+Myeloid = Seurat::RunUMAP(Myeloid, dims=1:elbow, reduction='pca')
+```
+
+## Check Quality of Clusters
+
+We explored if certain metrics and metadata are source of variation, which helps assessing the quality of the clustering
+
+```{r eval=FALSE}
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(Myeloid, metrics, ncol=2, with_dimplot=F, point_size=0.2)
+Seurat::DimPlot(Myeloid, reduction="umap", group.by=c('dataset', 'Phase', 'state'), label=FALSE)
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+list_plots = list()
+
+list_plots[['nUMI']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nUMI)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nUMI") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['nGene']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nGene)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nGene") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['S.Score']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=S.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("S.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['G2M.Score']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=G2M.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("G2M.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['percent.mitochondrial_RNA']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("percent.mitochondrial_RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['dataset']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=dataset)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("dataset") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['Phase']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['state']] =  ggplot2::ggplot(myeloid_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=state)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("state") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+
+patchwork::wrap_plots(list_plots, ncol=2)
+```
+
+
+## Choose Cluster Resolution
+
+As mentioned before, we used 10 different resolutions so that we could find the resolution that best separates the cells into clusters with interesting biological information. Again, the best resolution was chosen based on the stability of the clusters between different resolutions and the expression of cell-type markers, with the help of the [clustree](https://cran.r-project.org/web/packages/clustree/index.html) package [@R-clustree] (v.0.4.3).
+
+The *clustree* results, accompanied with UMAP visualizations for 4 different resolutions, is shown:
+
+```{r eval=FALSE}
+# 4. Use clustree:
+library(ggraph)
+clust_tree = clustree::clustree(Myeloid, prefix='integrated_snn_res.')
+# Visualize 4 different resolutions:
+clusters_01 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_04 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.7', label=TRUE, label.size=6, pt.size=.2)
+clusters_08 = Seurat::DimPlot(Myeloid, reduction="umap", group.by='integrated_snn_res.0.8', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_04) / (clusters_07 | clusters_08)) | clust_tree
+```
+
+```{r fig.width=15, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+clusters = list()
+for(res in c('integrated_snn_res.0.1', 'integrated_snn_res.0.4', 'integrated_snn_res.0.7', 'integrated_snn_res.0.8')){
+  myeloid_meta[,res] = factor(as.character(myeloid_meta[,res]), levels=as.character(0:max(myeloid_meta[,res])))
+  x = c()
+  y = c()
+  for(cluster in levels(myeloid_meta[,res])){
+    x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta[,res])==cluster]))
+    y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta[,res])==cluster]))
+  }
+  clusters[[res]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=res)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(res) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta[,res]), color='black')
+}
+((clusters$integrated_snn_res.0.1 | clusters$integrated_snn_res.0.4) / (clusters$integrated_snn_res.0.7 | clusters$integrated_snn_res.0.8)) | myeloid_clustree
+```
+
+The resolution that we ended up choosing was 0.8, after looking into the *clustree* results above, and the expression of gene markers that we show next.
+
+## Check Gene Expression
+
+The following markers were used to annotate the myeloid cell-types:
+
+| Genes                        | Cell-Types                          |
+|:---------------------------- |:----------------------------------- |
+| CD14, FCGR3A, MARCO, ITGAM   | Monocyte/Macrophage lineage **<sup>+</sup>**   |
+| FCER1A, CST3                 | conventional Dendritic Cells (cDCs) |
+| IL3RA, SERPINF1, GZMB, ITM2C | plasmacytoid Dendritic Cells (pDCs) |
+| KIT, TPSB2, TPSAB1           | Mast cells                          |
+| PPBP, PF4                    | Megakaryocytes / Platelets          |
+
+**<sup>+</sup>** In our data, we were not able to separate monocytes from macrophages. However, as it will be explained below, we further separated this lineage into other sub-groups.
+
+To assess the expression of these marker genes, we visualized their expression mapped into UMAP plots and violin plots.
+
+### Monocyte/Macrophage lineage
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Myeloid, reduction='umap', features=c('rna_CD14', 'rna_FCGR3A', 'rna_MARCO', 'rna_ITGAM'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Myeloid, c('rna_CD14', 'rna_FCGR3A', 'rna_MARCO', 'rna_ITGAM'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(myeloid_meta$integrated_snn_res.0.8)){
+  x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+  y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CD14', 'rna_FCGR3A', 'rna_MARCO', 'rna_ITGAM')){
+  umaps[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta$integrated_snn_res.0.8), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='integrated_snn_res.0.8', y=gene,
+                                                                   fill='integrated_snn_res.0.8')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(myeloid_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### cDCs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Myeloid, reduction='umap', features=c('rna_FCER1A', 'rna_CST3'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Myeloid, c('rna_FCER1A', 'rna_CST3'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(myeloid_meta$integrated_snn_res.0.8)){
+  x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+  y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_FCER1A', 'rna_CST3')){
+  umaps[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta$integrated_snn_res.0.8), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='integrated_snn_res.0.8', y=gene,
+                                                                   fill='integrated_snn_res.0.8')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(myeloid_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### pDCs
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Myeloid, reduction='umap', features=c('rna_IL3RA', 'rna_SERPINF1', 'rna_GZMB', 'rna_ITM2C'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Myeloid, c('rna_IL3RA', 'rna_SERPINF1', 'rna_GZMB', 'rna_ITM2C'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(myeloid_meta$integrated_snn_res.0.8)){
+  x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+  y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_IL3RA', 'rna_SERPINF1', 'rna_GZMB', 'rna_ITM2C')){
+  umaps[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta$integrated_snn_res.0.8), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='integrated_snn_res.0.8', y=gene,
+                                                                   fill='integrated_snn_res.0.8')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(myeloid_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Mast cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Myeloid, reduction='umap', features=c('rna_KIT', 'rna_TPSB2', 'rna_TPSAB1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Myeloid, c('rna_KIT', 'rna_TPSB2', 'rna_TPSAB1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(myeloid_meta$integrated_snn_res.0.8)){
+  x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+  y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_KIT', 'rna_TPSB2', 'rna_TPSAB1')){
+  umaps[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta$integrated_snn_res.0.8), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='integrated_snn_res.0.8', y=gene,
+                                                                   fill='integrated_snn_res.0.8')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(myeloid_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Megakaryocytes / Platelets
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Myeloid, reduction='umap', features=c('rna_PPBP', 'rna_PF4'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Myeloid, c('rna_PPBP', 'rna_PF4'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(myeloid_meta$integrated_snn_res.0.8)){
+  x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+  y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta$integrated_snn_res.0.8)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_PPBP', 'rna_PF4')){
+  umaps[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta$integrated_snn_res.0.8), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='integrated_snn_res.0.8', y=gene,
+                                                                   fill='integrated_snn_res.0.8')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(myeloid_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+
+## Sub-cluster the monocyte/macrophage lineage cluster
+
+Looking into the expression of genes from the previous point, we new that so far the cell-types of the clusters were the following:
+
+| Clusters  | Annotations                 |
+|:--------- |:--------------------------- |
+| 0         | cDCs                        |
+| 1-4, 6-12 | Monocyte/Macrophage lineage |
+| 5         | Mast cells                  |
+| 14        | pDCs                        |
+| 13        | Unkown                      |
+
+However, we wanted to further sub-cluster the monocyte/macrophage lineage cells and, at this level, we were not able to properly do so. As such, we next obtained a subset dataset with only the clusters from the monocyte/macrophage lineage and re-clustered the cells, to see if further annotation could be made.
+
+But first, we saved the seurat object of myeloid cells we have until now:
+
+```{r eval=FALSE}
+SeuratDisk::SaveH5Seurat(Myeloid, paste(project_dir, '2_annotation/results_Myeloid/datasets/Myeloid_clustered.h5Seurat', sep='/'))
+```
+
+### Find Clusters
+
+**a)** Subset dataset to obtain only the wanted cells
+
+```{r eval=FALSE}
+monocytes_macrophages = subset(Myeloid, cells=rownames(Myeloid@meta.data)[!Myeloid$integrated_snn_res.0.8%in%c('0', '5', '13', '14')])
+```
+
+**b)** Prepare the data, by running PCA and calculating the elbow.
+
+```{r eval=FALSE}
+# PCA:
+monocytes_macrophages = Seurat::RunPCA(monocytes_macrophages, assay='integrated')
+
+# Calculate Elbow:
+# First metric:
+pct = monocytes_macrophages[["pca"]]@stdev /sum(monocytes_macrophages[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+# Second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 10
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (10) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=10
+ggplot2::ggplot(data=monomacro_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = monomacro_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(monomacro_elbowDF$pct[monomacro_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+**c)**  After finding the elbow, we determined the K-nearest neighbours using the calculated elbow and found the clusters. Again, we used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+monocytes_macrophages = Seurat::FindNeighbors(monocytes_macrophages, dims=1:elbow)
+
+# Find clusters:
+monocytes_macrophages = Seurat::FindClusters(monocytes_macrophages, resolution=seq(0.1, 1, by=.1))
+
+# Run UMAP visualization:
+monocytes_macrophages = Seurat::RunUMAP(monocytes_macrophages, dims=1:elbow, reduction='pca')
+```
+
+### Choose Cluster Resolution
+
+The resolution that best separates the cells into clusters with interesting biological information was found with the help of the [clustree](https://cran.r-project.org/web/packages/clustree/index.html) [@R-clustree] (v.0.4.3) package. The *clustree* results, accompanied with UMAP visualizations for 4 different resolutions, is shown:
+
+```{r eval=FALSE}
+# 4. Use clustree:
+library(ggraph)
+clust_tree = clustree::clustree(monocytes_macrophages, prefix='integrated_snn_res.')
+# Visualize 4 different resolutions:
+clusters_01 = Seurat::DimPlot(monocytes_macrophages, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_04 = Seurat::DimPlot(monocytes_macrophages, reduction="umap", group.by='integrated_snn_res.0.2', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(monocytes_macrophages, reduction="umap", group.by='integrated_snn_res.0.3', label=TRUE, label.size=6, pt.size=.2)
+clusters_08 = Seurat::DimPlot(monocytes_macrophages, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_04) / (clusters_07 | clusters_08)) | clust_tree
+```
+
+```{r fig.width=15, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+clusters = list()
+for(res in c('integrated_snn_res.0.1', 'integrated_snn_res.0.2', 'integrated_snn_res.0.3', 'integrated_snn_res.0.4')){
+  monomacro_meta[,res] = factor(as.character(monomacro_meta[,res]), levels=as.character(0:max(monomacro_meta[,res])))
+  x = c()
+  y = c()
+  for(cluster in levels(monomacro_meta[,res])){
+    x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta[,res])==cluster]))
+    y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta[,res])==cluster]))
+  }
+  clusters[[res]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=res)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(res) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta[,res]), color='black')
+}
+((clusters$integrated_snn_res.0.1 | clusters$integrated_snn_res.0.2) / (clusters$integrated_snn_res.0.3 | clusters$integrated_snn_res.0.4)) | monomacro_clustree
+```
+
+The resolution that we ended up choosing was 0.3, after looking into the *clustree* results above, and the expression of gene markers that we show next.
+
+### Check Gene Expression
+
+ When trying to annotate the cells, we looked into markers that could separate the cells into pro- and anti-inflammatory, proliferative, SPP1+ and FCN1+ macro/mono cells. We were not able to see a clear separation between monocytes and macrophages, so no distinction regarding that was made.
+
+| Genes                      | Cell-Types                   |
+|:-------------------------- |:---------------------------- |
+| CD14, FCGR3A, MARCO, ITGAM | Monocyte/Macrophage lineage  |
+| IL1B, IL6, S100A8, S100A9  | Pro-Inflammatory Macro/Mono  |
+| CD163, SEPP1, APOE, MAF    | Anti-Inflammatory Macro/Mono |
+| MKI67, KIAA0101, STMN1     | Proliferative Macro/Mono     |
+| SPP1                       | SPP1+ Macro/Mono             |
+| FCN1                       | FCN1+ Macro/Mono             |
+
+#### Monocyte/Macrophage lineage
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(monocytes_macrophages, reduction='umap', features=c('rna_CD14', 'rna_FCGR3A', 'rna_MARCO', 'rna_ITGAM'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(monocytes_macrophages, c('rna_CD14', 'rna_FCGR3A', 'rna_MARCO', 'rna_ITGAM'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(monomacro_meta$integrated_snn_res.0.3)){
+  x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+  y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CD14', 'rna_FCGR3A', 'rna_MARCO', 'rna_ITGAM')){
+  umaps[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta$integrated_snn_res.0.3), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='integrated_snn_res.0.3', y=gene,
+                                                                   fill='integrated_snn_res.0.3')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(monomacro_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+#### Pro-Inflammatory Macro/Mono
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(monocytes_macrophages, reduction='umap', features=c('rna_IL1B', 'rna_IL6', 'rna_S100A8', 'rna_S100A9'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(monocytes_macrophages, c('rna_IL1B', 'rna_IL6', 'rna_S100A8', 'rna_S100A9'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(monomacro_meta$integrated_snn_res.0.3)){
+  x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+  y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_IL1B', 'rna_IL6', 'rna_S100A8', 'rna_S100A9')){
+  umaps[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta$integrated_snn_res.0.3), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='integrated_snn_res.0.3', y=gene,
+                                                                   fill='integrated_snn_res.0.3')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(monomacro_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+#### Anti-Inflammatory Macro/Mono
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(monocytes_macrophages, reduction='umap', features=c('rna_CD163', 'rna_SEPP1', 'rna_APOE', 'rna_MAF'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(monocytes_macrophages, c('rna_CD163', 'rna_SEPP1', 'rna_APOE', 'rna_MAF'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(monomacro_meta$integrated_snn_res.0.3)){
+  x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+  y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CD163', 'rna_SEPP1', 'rna_APOE', 'rna_MAF')){
+  umaps[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta$integrated_snn_res.0.3), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='integrated_snn_res.0.3', y=gene,
+                                                                   fill='integrated_snn_res.0.3')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(monomacro_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+#### Proliferative Macro/Mono
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(monocytes_macrophages, reduction='umap', features=c('rna_MKI67', 'rna_KIAA0101', 'rna_STMN1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(monocytes_macrophages, c('rna_MKI67', 'rna_KIAA0101', 'rna_STMN1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(monomacro_meta$integrated_snn_res.0.3)){
+  x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+  y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_MKI67', 'rna_KIAA0101', 'rna_STMN1')){
+  umaps[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta$integrated_snn_res.0.3), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='integrated_snn_res.0.3', y=gene,
+                                                                   fill='integrated_snn_res.0.3')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(monomacro_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+#### SPP1+ Macro/Mono
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(monocytes_macrophages, reduction='umap', features=c('rna_SPP1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(monocytes_macrophages, c('rna_SPP1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(monomacro_meta$integrated_snn_res.0.3)){
+  x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+  y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_SPP1')){
+  umaps[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta$integrated_snn_res.0.3), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='integrated_snn_res.0.3', y=gene,
+                                                                   fill='integrated_snn_res.0.3')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(monomacro_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+#### FCN1+ Macro/Mono
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(monocytes_macrophages, reduction='umap', features=c('rna_FCN1'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(monocytes_macrophages, c('rna_FCN1'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(monomacro_meta$integrated_snn_res.0.3)){
+  x = c(x, mean(monomacro_meta$UMAP_1[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+  y = c(y, mean(monomacro_meta$UMAP_2[as.character(monomacro_meta$integrated_snn_res.0.3)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_FCN1')){
+  umaps[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(monomacro_meta$integrated_snn_res.0.3), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(monomacro_meta, ggplot2::aes_string(x='integrated_snn_res.0.3', y=gene,
+                                                                   fill='integrated_snn_res.0.3')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(monomacro_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Annotations of the sub-cluster
+
+Looking into the expression of genes from the previous point, we new that the cell-types of the clusters were the following:
+
+| Clusters | Annotations                        |
+|:-------  |:---------------------------------- |
+| 0, 6     | SPP1+ anti-inflammatory macro/mono |
+| 1        | pro-inflammatory macro/mono        |
+| 2, 3, 5  | anti-inflammatory macro/mono       |
+| 4        | FCN1+ pro-inflammatory macro/mono  |
+
+We gathered the cells that belonged to each annotation, so that we could annotate directly the big `Myeloid` dataset in the following steps:
+
+```{r eval=FALSE}
+spp1_cells = rownames(monocytes_macrophages@meta.data)[monocytes_macrophages$integrated_snn_res.0.3%in%c('0','6')]
+pro_cells = rownames(monocytes_macrophages@meta.data)[monocytes_macrophages$integrated_snn_res.0.3=='1']
+anti_cells = rownames(monocytes_macrophages@meta.data)[monocytes_macrophages$integrated_snn_res.0.3%in%c('2','3','5')]
+fcn1_cells = rownames(monocytes_macrophages@meta.data)[monocytes_macrophages$integrated_snn_res.0.3=='4']
+```
+
+
+## Final Annotation
+
+The final annotations are present in the following table:
+
+| Clusters (dataset where cluster is from) | Annotation_Level_2                 | Annotation_Level_1           |      
+|:---------------------------------------- |:---------------------------------- |:---------------------------- |
+| 0 (`Myeloid`)                            | cDCs                               | cDCs                         |
+| 5 (`Myeloid`)                            | Mast cells                         | Mast cells                   |
+| 14 (`Myeloid`)                           | pDCs                               | pDCs                         |
+| 13 (`Myeloid`)                           | Unkown                             | Unkown                       |
+| 0, 6 (`monocytes_macrophages`)           | SPP1+ anti-inflammatory macro/mono | Anti-inflammatory macro/mono |
+| 2, 3, 5 (`monocytes_macrophages`)        | Other anti-inflammatory macro/mono | Anti-inflammatory macro/mono |
+| 4 (`monocytes_macrophages`)              | FCN1+ pro-inflammatory macro/mono  | Pro-inflammatory macro/mono  |
+| 1 (`monocytes_macrophages`)              | Other pro-inflammatory macro/mono  | Pro-inflammatory macro/mono  |
+
+The annotations were stored in the metadata of the seurat object, with the variable names corresponding to the columns in the previous table:
+
+```{r eval=FALSE}
+# 1. Annotation level 2:
+# 1.1. Annotate of the cells not in the monocyte/macrophage lineage:
+Myeloid[['Annotation_Level_2']] = rep('', length(Myeloid$integrated_snn_res.0.8))
+cDCs_cells = rownames(Myeloid@meta.data)[Myeloid$integrated_snn_res.0.8=='0']
+Myeloid@meta.data[cDCs_cells, 'Annotation_Level_2'] = 'cDCs'
+mast_cells = rownames(Myeloid@meta.data)[Myeloid$integrated_snn_res.0.8=='5']
+Myeloid@meta.data[mast_cells, 'Annotation_Level_2'] = 'Mast cells'
+pDCs_cells = rownames(Myeloid@meta.data)[Myeloid$integrated_snn_res.0.8=='14']
+Myeloid@meta.data[pDCs_cells, 'Annotation_Level_2'] = 'pDCs'
+unknown_cells = rownames(Myeloid@meta.data)[Myeloid$integrated_snn_res.0.8=='13']
+Myeloid@meta.data[unknown_cells, 'Annotation_Level_2'] = 'Unknown'
+# 1.2. Annotate the cells in the monocyte/macrophage lineage:
+Myeloid@meta.data[spp1_cells, 'Annotation_Level_2'] = 'SPP1+ Anti-inflammatory macro/mono'
+Myeloid@meta.data[pro_cells, 'Annotation_Level_2'] = 'Other pro-inflammatory macro/mono'
+Myeloid@meta.data[anti_cells, 'Annotation_Level_2'] = 'Other anti-inflammatory macro/mono'
+Myeloid@meta.data[fcn1_cells, 'Annotation_Level_2'] = 'FCN1+ Pro-inflammatory macro/mono'
+
+# 2. Annotation level 1:
+Myeloid[['Annotation_Level_1']] = as.character(Myeloid$Annotation_Level_2)
+Myeloid@meta.data[Myeloid$Annotation_Level_2%in%c('SPP1+ Anti-inflammatory macro/mono', 'Other anti-inflammatory macro/mono'),
+                  'Annotation_Level_1'] = 'Anti-inflammatory macro/mono'
+Myeloid@meta.data[Myeloid$Annotation_Level_2%in%c('FCN1+ Pro-inflammatory macro/mono', 'Other pro-inflammatory macro/mono'),
+                  'Annotation_Level_1'] = 'Pro-inflammatory macro/mono'
+
+# 3. Annotation level 0:
+Myeloid[['Annotation_Level_0']] = factor(rep('Myeloid cells', dim(Myeloid@meta.data)[1]))
+
+# 4. Remove [integrated...] metadata variables
+Myeloid@meta.data = Myeloid@meta.data[, !colnames(Myeloid@meta.data) %in%
+                                        c(grep('^in', colnames(Myeloid@meta.data), value=T), 'seurat_clusters')]
+```
+
+UMAP visualizations with cells coloured by the new annotations:
+
+```{r eval=FALSE}
+Seurat::DimPlot(Myeloid, reduction="umap", group.by='Annotation_Level_2', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Myeloid, reduction="umap", group.by='Annotation_Level_1', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+```
+
+```{r fig.width=8, fig.height=15, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+myeloid_anots = list()
+for(level in c('Annotation_Level_1', 'Annotation_Level_2')){
+  myeloid_meta[,level] = factor(as.character(myeloid_meta[,level]), levels=unique(myeloid_meta[,level]))
+  x = c()
+  y = c()
+  for(cluster in levels(myeloid_meta[,level])){
+    x = c(x, mean(myeloid_meta$UMAP_1[as.character(myeloid_meta[,level])==cluster]))
+    y = c(y, mean(myeloid_meta$UMAP_2[as.character(myeloid_meta[,level])==cluster]))
+  }
+  myeloid_anots[[level]] = ggplot2::ggplot(myeloid_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=level)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(level) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(myeloid_meta[,level]), color='black')
+}
+patchwork::wrap_plots(myeloid_anots, ncol=1)
+```
+
+
+## Markers of the Cell-Type Annotations
+
+::: {.rmdnote}
+**NOTE**
+
+There was a cluster of cells that we were not able to annotate (named *Unknown*), even after calculating the markers for each annotation.
+:::
+
+### Annotation level 2
+
+```{r eval=FALSE}
+Seurat::Idents(Myeloid) = 'Annotation_Level_2'
+Myeloid_Level_2_markers = Seurat::FindAllMarkers(Myeloid, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Myeloid_Level_2_markers, paste(project_dir, '2_annotation/results_Myeloid/markers/markers_Level_2.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Myeloid_Level_2_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(myeloid_Level_2_markers[,c(6,7, 1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+### Annotation level 1
+
+```{r eval=FALSE}
+Seurat::Idents(Myeloid) = 'Annotation_Level_1'
+Myeloid_Level_1_markers = Seurat::FindAllMarkers(Myeloid, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Myeloid_Level_1_markers, paste(project_dir, '2_annotation/results_Myeloid/markers/markers_Level_1.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Myeloid_Level_1_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(myeloid_Level_1_markers[,c(6,7, 1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+
+## Save Data
+
+The myeloid dataset with the new annotations was stored. It will be necessary for annotation purposes at the end of the pipeline:
+
+```{r eval=FALSE}
+# Save Seurat object
+SeuratDisk::SaveH5Seurat(Myeloid, paste(project_dir, '2_annotation/results_Myeloid/datasets/Myeloid_finalAnnots.h5Seurat', sep='/'))
+```
