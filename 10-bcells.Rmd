@@ -1,0 +1,606 @@
+# B-cells
+
+```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
+library(ggraph)
+library(patchwork)
+# CRC - Bcells
+bcells_elbowDF = read.csv('data/bcells_elbowDF.csv', row.names=1)
+bcells_meta = read.csv('data/bcells_meta.csv', row.names=1)
+bcells_clustree = readRDS('data/bcells_clustree.Rdata')
+bcells_Level_2_markers = read.csv('data/bcells_markers_2.csv', row.names=1)
+bcells_Level_1_markers = read.csv('data/bcells_markers_1.csv', row.names=1)
+```
+
+To annotate the group of Bcells, we started out by loading the seurat object of Bcells.
+
+```{r eval=FALSE}
+Bcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Bcells/datasets/Bcells.h5Seurat', sep='/'))
+```
+
+## Find Clusters
+
+To find the clusters of B-cells, we started by performing a PCA. Again, scale was not performed, as the data was already scaled previously.
+
+```{r eval=FALSE}
+Bcells = Seurat::RunPCA(Bcells, assay='integrated')
+invisible(gc())
+Seurat::DefaultAssay(Bcells)='integrated'
+```
+
+Then, we calculated the number of PCs to use when finding the clusters in the next steps, by finding where the principal components start to elbow.
+
+```{r eval=FALSE}
+# Calculate the first metric:
+pct = Bcells[["pca"]]@stdev /sum(Bcells[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+
+# Calculate the second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 10
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (10) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=10
+ggplot2::ggplot(data=bcells_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = bcells_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(bcells_elbowDF$pct[bcells_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+After finding the elbow, we determined the K-nearest neighbours using the calculated elbow and found the clusters. Again, we used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+Bcells = Seurat::FindNeighbors(Bcells, dims=1:elbow)
+
+# Find clusters:
+Bcells = Seurat::FindClusters(Bcells, resolution=seq(0.1, 1, by=.1))
+
+# Run UMAP visualization:
+Bcells = Seurat::RunUMAP(Bcells, dims=1:elbow, reduction='pca')
+```
+
+
+## Check Quality of Clusters
+
+We explored if certain metrics and metadata are source of variation, which helps assessing the quality of the clustering
+
+```{r eval=FALSE}
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(Bcells, metrics, ncol=2, with_dimplot=F, point_size=0.2)
+Seurat::DimPlot(Bcells, reduction="umap", group.by=c('dataset', 'Phase', 'state'), label=FALSE)
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+list_plots = list()
+
+list_plots[['nUMI']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nUMI)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nUMI") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['nGene']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nGene)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nGene") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['S.Score']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=S.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("S.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['G2M.Score']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=G2M.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("G2M.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['percent.mitochondrial_RNA']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("percent.mitochondrial_RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['dataset']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=dataset)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("dataset") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['Phase']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['state']] =  ggplot2::ggplot(bcells_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=state)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("state") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+
+patchwork::wrap_plots(list_plots, ncol=2)
+```
+
+
+## Choose cluster resolution
+
+Again, we used 10 different resolutions so that we could find the resolution that best separates the cells into clusters with interesting biological information.The best resolution was chosen based on the stability of the clusters between different resolutions and the expression of cell-type markers, with the help of the [clustree](https://cran.r-project.org/web/packages/clustree/index.html) package [@R-clustree] (v.0.4.3).
+
+The *clustree* results, accompanied with UMAP visualizations for 4 different resolutions, is shown:
+
+```{r eval=FALSE}
+# 4. Use clustree:
+library(ggraph)
+clust_tree = clustree::clustree(Bcells, prefix='integrated_snn_res.')
+# Visualize 4 different resolutions:
+clusters_01 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_04 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.5', label=TRUE, label.size=6, pt.size=.2)
+clusters_08 = Seurat::DimPlot(Bcells, reduction="umap", group.by='integrated_snn_res.0.7', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_04) / (clusters_07 | clusters_08)) | clust_tree
+```
+
+```{r fig.width=15, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+clusters = list()
+for(res in c('integrated_snn_res.0.1', 'integrated_snn_res.0.4', 'integrated_snn_res.0.5', 'integrated_snn_res.0.7')){
+  bcells_meta[,res] = factor(as.character(bcells_meta[,res]), levels=as.character(0:max(bcells_meta[,res])))
+  x = c()
+  y = c()
+  for(cluster in levels(bcells_meta[,res])){
+    x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta[,res])==cluster]))
+    y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta[,res])==cluster]))
+  }
+  clusters[[res]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=res)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(res) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta[,res]), color='black')
+}
+((clusters$integrated_snn_res.0.1 | clusters$integrated_snn_res.0.4) / (clusters$integrated_snn_res.0.5 | clusters$integrated_snn_res.0.7)) | bcells_clustree
+```
+
+The resolution that we ended up choosing was 0.7, after looking into the *clustree* results above, and the expression of gene markers that we show next.
+
+
+## Check Gene Expression
+
+The following markers were used to annotate the stromal cell-types:
+
+| Genes                                                   | Cell-Types                             |
+|:------------------------------------------------------- |:-------------------------------------- |
+| IGHD, MS4A1, CXCR4, NR4A2                               | Naive B-cells                           |
+| CD27, MS4A1, CXCR4, NR4A2                               | Memory B-cells                          |
+| STMN1, ACTB, RGS13, MKI67, PCNA, MARCKSL1, HMGN1, HMGN2 | Proliferative cells                    |
+| MZB1, CD27                                              | Plasma cells                           |
+| IGHA1, IGHA2                                            | IgA+                                   |
+| IGHM                                                    | IgM+                                   |
+| IGHG1, IGHG2, IGHG3, IGHG4, IGHGP                       | IgG+                                   |
+| IGKC, IGKV1-12, IGKV1-8, IGKV4-1, IGKV5-2, IGKV1-5, IGKV1-6, IGKV3-7, IGKV1-9, IGKV3-11, IGKV3-15, IGKV1-16, IGKV1-17, IGKV3-20, IGKV6-21, IGKV2-24, IGKV2-26, IGKV1-27, IGKV2-28, IGKV2-29, IGKV2-30, IGKV1-33, IGKV1-39, IGKV1D-39, IGKV1D-33, IGKV2D-30, IGKV2D-29, IGKV2D-28, IGKV2D-24, IGKV6D-21, IGKV3D-20, IGKV1D-17, IGKV1D-16, IGKV3D-15, IGKV3D-11, IGKV1D-13, IGKV1D-12, IGKV1D-43, IGKV1D-8, IGKV1OR2-108              | Ig kappa expression  **<sup>+</sup>**  |
+| IGLON5, IGLVI-70, IGLV4-69, IGLV8-61, IGLV4-60, IGLV6-57, IGLV11-55, IGLV10-54, IGLV1-51, IGLV1-50, IGLV9-49, IGLV5-48, IGLV1-47, IGLV7-46, IGLV5-45, IGLV1-44, IGLV7-43, IGLV1-41, IGLV1-40, IGLV1-36, IGLV3-27, IGLV3-25, IGLV2-23, IGLV3-21, IGLV3-19, IGLV2-18, IGLV3-16, IGLV2-14, IGLV3-12, IGLV2-11, IGLV3-10, IGLV3-9, IGLV2-8, IGLV3-1, IGLL5, IGLJ2, IGLC2, IGLJ3, IGLC3, IGLC4, IGLC5, IGLC6, IGLC7, IGLL1                  | Ig lambda expression  **<sup>+</sup>** |
+
+**<sup>+</sup>** The expression of these genes was summed for each cell. The aggregated values were those assessed.
+
+To assess the expression of these marker genes, we visualized their expression mapped into UMAP plots and violin plots.
+
+### Naive B-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('rna_IGHD', 'rna_MS4A1', 'rna_CXCR4', 'rna_NR4A2'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('rna_IGHD', 'rna_MS4A1', 'rna_CXCR4', 'rna_NR4A2'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_IGHD', 'rna_MS4A1', 'rna_CXCR4', 'rna_NR4A2')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Memory B-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('rna_CD27', 'rna_MS4A1', 'rna_CXCR4', 'rna_NR4A2'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('rna_IGHD', 'rna_MS4A1', 'rna_CXCR4', 'rna_NR4A2'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CD27', 'rna_MS4A1', 'rna_CXCR4', 'rna_NR4A2')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Proliferative cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('rna_STMN1', 'rna_ACTB', 'rna_RGS13', 'rna_MKI67', 'rna_PCNA', 'rna_MARCKSL1', 'rna_HMGN1', 'rna_HMGN2'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('rna_STMN1', 'rna_ACTB', 'rna_RGS13', 'rna_MKI67', 'rna_PCNA', 'rna_MARCKSL1', 'rna_HMGN1', 'rna_HMGN2'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=40, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_STMN1', 'rna_ACTB', 'rna_RGS13', 'rna_MKI67', 'rna_PCNA', 'rna_MARCKSL1', 'rna_HMGN1', 'rna_HMGN2')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### IgA+ cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('rna_IGHA1', 'rna_IGHA2'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('rna_IGHA1', 'rna_IGHA2'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_IGHA1', 'rna_IGHA2')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### IgM+ cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('rna_IGHM'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('rna_IGHM'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_IGHM')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### IgG+ cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('rna_IGHG1', 'rna_IGHG2', 'rna_IGHG3', 'rna_IGHG4', 'rna_IGHGP'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('rna_IGHG1', 'rna_IGHG2', 'rna_IGHG3', 'rna_IGHG4', 'rna_IGHGP'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=25, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_IGHG1', 'rna_IGHG2', 'rna_IGHG3', 'rna_IGHG4', 'rna_IGHGP')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+### Kappa and Lambda expression
+
+```{r eval=FALSE}
+kappa = grep('^IGK', rownames(Bcells@assays$RNA@data), value=T)
+kappa_expression = Matrix::colSums(Seurat::GetAssayData(Bcells, assay='RNA', slot='data')[kappa,])
+Bcells[['kappa_expression']] = kappa_expression
+
+lambda = grep('^IGL', rownames(Bcells@assays$RNA@data), value=T)
+lambda_expression = Matrix::colSums(Seurat::GetAssayData(Bcells, assay='RNA', slot='data')[lambda[2:44],])
+Bcells[['lambda_expression']] = lambda_expression
+
+umap = Seurat::FeaturePlot(Bcells, reduction='umap', features=c('kappa_expression', 'lambda_expression'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Bcells, c('kappa_expression', 'lambda_expression'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(bcells_meta$integrated_snn_res.0.7)){
+  x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+  y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta$integrated_snn_res.0.7)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('kappa_expression', 'lambda_expression')){
+  umaps[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta$integrated_snn_res.0.7), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='integrated_snn_res.0.7', y=gene,
+                                                                   fill='integrated_snn_res.0.7')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(bcells_meta[, gene])))
+}
+
+patchwork::wrap_plots(umaps, ncol=1) | patchwork::wrap_plots(vlns, ncol=1)
+```
+
+
+## Final Annotation
+
+Looking into the expression of genes from the previous point, the following annotations were made:
+
+| Clusters       | Annotation_Level_2    | Annotation_Level_1    |
+|:-------------- |:--------------------- |:--------------------- |
+| 2, 12, 14      | Naive B-cells         | Naive B-cells         |
+| 0, 1, 5, 7, 14 | Memory B-cells        | Memory B-cells        |
+| 10, 11         | Proliferative B-cells | Proliferative B-cells |
+| 9              | IgG+ Plasma cells     | IgG+ Plasma cells     |
+| 3, 4, 6, 8, 15 | IgA+ Plasma cells 1   | IgA+ Plasma cells     |
+| 16             | IgA+ Plasma cells 2   | IgA+ Plasma cells     |
+
+The annotations were stored in the metadata of the seurat object, with the variable names corresponding to the columns in the previous table:
+
+```{r eval=FALSE}
+# Annotation level 3:
+Bcells[['Annotation_Level_2']] = rep('', length(Bcells$integrated_snn_res.0.7))
+memory_cells = rownames(Bcells@meta.data)[Bcells$integrated_snn_res.0.7=='0', '1', '5', '7', '14']
+Bcells@meta.data[memory_cells, 'Annotation_Level_2'] = 'Memory Bcells'
+naive_cells = rownames(Bcells@meta.data)[Bcells$integrated_snn_res.0.7=='2', '12', '14']
+Bcells@meta.data[naive_cells, 'Annotation_Level_2'] = 'Naive Bcells'
+iga1_cells = rownames(Bcells@meta.data)[Bcells$integrated_snn_res.0.7=='3', '4', '6', '8', '15']
+Bcells@meta.data[iga1_cells, 'Annotation_Level_2'] = 'IgA+ Plasma cells 1'
+igg_cells = rownames(Bcells@meta.data)[Bcells$integrated_snn_res.0.7=='9']
+Bcells@meta.data[igg_cells, 'Annotation_Level_2'] = 'IgG+ Plasma cells'
+prol_cells = rownames(Bcells@meta.data)[Bcells$integrated_snn_res.0.7=='10', '11']
+Bcells@meta.data[prol_cells, 'Annotation_Level_2'] = 'Proliferative Bcells'
+iga2_cells = rownames(Bcells@meta.data)[Bcells$integrated_snn_res.0.7=='16']
+Bcells@meta.data[iga2_cells, 'Annotation_Level_2'] = 'IgA+ Plasma cells 2'
+
+# 9.2. Annotation level 1:
+Bcells[['Annotation_Level_1']] = as.character(Bcells$Annotation_Level_2)
+Bcells@meta.data[Bcells$Annotation_Level_2%in%c('IgA+ Plasma cells 1', 'IgA+ Plasma cells 2'), 'Annotation_Level_1'] = 'IgA+ Plasma cells'
+
+# 9.3. Annotation level 0:
+Bcells[['Annotation_Level_0']] = factor(rep('Bcells', dim(Bcells@meta.data)[1]))
+
+# 9.4. Remove [integrated...] metadata variables
+Bcells@meta.data = Bcells@meta.data[, !colnames(Bcells@meta.data) %in%
+                                      c(grep('^in', colnames(Bcells@meta.data), value=T), 'seurat_clusters')]
+```
+
+UMAP visualizations with cells coloured by the new annotations:
+
+```{r eval=FALSE}
+Seurat::DimPlot(Bcells, reduction="umap", group.by='Annotation_Level_2', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+Seurat::DimPlot(Bcells, reduction="umap", group.by='Annotation_Level_1', label=TRUE, label.size=3, pt.size=.5, repel=T) +
+  ggplot2::theme_minimal()
+```
+
+```{r fig.width=8, fig.height=10, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+bcells_anots = list()
+for(level in c('Annotation_Level_1', 'Annotation_Level_2')){
+  bcells_meta[,level] = factor(as.character(bcells_meta[,level]), levels=unique(bcells_meta[,level]))
+  x = c()
+  y = c()
+  for(cluster in levels(bcells_meta[,level])){
+    x = c(x, mean(bcells_meta$UMAP_1[as.character(bcells_meta[,level])==cluster]))
+    y = c(y, mean(bcells_meta$UMAP_2[as.character(bcells_meta[,level])==cluster]))
+  }
+  bcells_anots[[level]] = ggplot2::ggplot(bcells_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=level)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(level) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(bcells_meta[,level]), color='black')
+}
+patchwork::wrap_plots(bcells_anots, ncol=1)
+```
+
+## Markers of the Cell-Type Annotations
+
+### Annotation level 2
+
+```{r eval=FALSE}
+Seurat::Idents(Bcells) = 'Annotation_Level_2'
+Bcells_Level_2_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Bcells_Level_2_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_Level_2.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Bcells_Level_2_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(bcells_Level_2_markers[,c(6,7, 1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+### Annotation level 1
+
+```{r eval=FALSE}
+Seurat::Idents(Bcells) = 'Annotation_Level_1'
+Bcells_Level_1_markers = Seurat::FindAllMarkers(Bcells, assay='RNA', slot='data', logfc.threshold=.8, min.pct = 0.3, only.pos=TRUE)
+write.csv(Bcells_Level_1_markers, paste(project_dir, '2_annotation/results_Bcells/markers/markers_Level_1.csv', sep='/'))
+invisible(gc())
+
+DT::datatable(Bcells_Level_1_markers[,c(6,7,1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='400px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+```{r warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+DT::datatable(bcells_Level_1_markers[,c(6,7, 1:5)], rownames=FALSE, extensions = 'FixedColumns',
+              options=list(scrollY='500px', scrollCollapse=TRUE,
+                           autoWidth=TRUE,scrollX=TRUE, paging=FALSE,
+                           fixedColumns = list(leftColumns=1)))
+```
+
+
+## Save Data
+
+The Bcells dataset with the new annotations was stored. It will be necessary for annotation purposes at the end of the pipeline:
+
+```{r eval=FALSE}
+# Save Seurat object
+SeuratDisk::SaveH5Seurat(Bcells, paste(project_dir, '2_annotation/results_Bcells/datasets/Bcells_finalAnnots.h5Seurat', sep='/'))
+```
