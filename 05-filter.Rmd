@@ -9,8 +9,6 @@ merge_before = read.csv('data/merge_before.csv', row.names=1)
 merge_after = read.csv('data/merge_after.csv', row.names=1)
 ```
 
-
-
 ## Generate Quality Metrics
 
 Seurat automatically calculates the number of UMIs per cell (variable `nUMI`) and the number of genes detected (i.e., without 0 counts) per cell (variable `nGene`). However, additional metrics were calculated to follow the criteria set in the beggining of chapter [2 Quality Control](#quality-control):
