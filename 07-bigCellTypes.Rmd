@@ -12,7 +12,7 @@ bigGroups_meta = read.csv('data/bigGroups_meta.csv', row.names=1)
 
 We started by separating the cells into 5 big groups of cell-types: Epithelial, Stromal, Myeloid, B- and T- cells. The cells from each of these groups were further sub-clustered individually to obtain more detailed annotations.
 
-In general, to perform cell annotation, we evaluated the RNA counts expression of certain genes, known to be markers of certain cell-types, on clusters of cells obtained using the integrated data. We detail all the pipeline for each of the big groups in the following chapters.
+In general, to perform cell annotation, we evaluated the RNA counts expression of certain genes, known to be markers of certain cell-types, on clusters of cells obtained using the integrated data. We detail all the pipeline for each of the big groups in the following chapters. Also, original code files for the annotation of all cells are [here](https://github.com/saracardoso/CRC_ATLAS/tree/master/2_annotation).
 
 So, first, we loaded the integrated seurat object:
 
