@@ -1,6 +1,5 @@
 # Stromal Cells
 
-
 ```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
 library(ggraph)
 library(patchwork)
