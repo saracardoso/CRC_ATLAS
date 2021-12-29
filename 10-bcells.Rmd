@@ -167,7 +167,7 @@ The resolution that we ended up choosing was 0.7, after looking into the *clustr
 
 ## Check Gene Expression
 
-The following markers were used to annotate the stromal cell-types:
+The following markers were used to annotate the B-cells cell-types:
 
 | Genes                                                   | Cell-Types                             |
 |:------------------------------------------------------- |:-------------------------------------- |
