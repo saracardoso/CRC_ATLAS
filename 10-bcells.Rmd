@@ -62,7 +62,7 @@ ggplot2::ggplot(data=bcells_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 
   ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
 ```
 
-After finding the elbow, we determined the K-nearest neighbours using the calculated elbow and found the clusters. Again, we used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+After finding the elbow, we determined the K-nearest neighbors using the calculated elbow and found the clusters. Again, we used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
 
 ```{r eval=FALSE}
 # Determine the K-nearest neighbor graph

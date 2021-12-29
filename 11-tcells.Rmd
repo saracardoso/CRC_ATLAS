@@ -1,0 +1,359 @@
+# T-cells
+
+```{r echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, cache=FALSE}
+library(ggraph)
+library(patchwork)
+# CRC - Tcells
+tcells_before_elbowDF = read.csv('data/tcells_before_elbowDF.csv', row.names=1)
+tcells_before_meta = read.csv('data/tcells_before_meta.csv', row.names=1)
+tcells_before_clustree = readRDS('data/tcells_before_clustree.Rdata')
+SIGMA_all_res02 = readRDS('data/tcells_before_SIGMA.Rdata')
+# CRC - Tcells_07
+tcells_07_elbowDF = read.csv('data/tcells_07_elbowDF.csv', row.names=1)
+tcells_07_meta = read.csv('data/tcells_07_meta.csv', row.names=1)
+tcells_07_clustree = readRDS('data/tcells_07_clustree.Rdata')
+# CRC - Tcells_1
+tcells_1_elbowDF = read.csv('data/tcells_1_elbowDF.csv', row.names=1)
+tcells_1_meta = read.csv('data/tcells_1_meta.csv', row.names=1)
+tcells_1_clustree = readRDS('data/tcells_1_clustree.Rdata')
+# CRC - Tcells_2
+tcells_2_elbowDF = read.csv('data/tcells_2_elbowDF.csv', row.names=1)
+tcells_2_meta = read.csv('data/tcells_2_meta.csv', row.names=1)
+tcells_2_clustree = readRDS('data/tcells_2_clustree.Rdata')
+```
+
+To annotate the group of Tcells, we started out by loading the seurat object of Tcells
+
+```{r eval=FALSE}
+Tcells = SeuratDisk::LoadH5Seurat(paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells.h5Seurat', sep='/'))
+```
+
+
+## First groups of T-cells
+
+### Find Clusters
+
+To find the clusters of T-cells, we started by performing a PCA. Scale was not performed, as the data was already scaled previously.
+
+```{r eval=FALSE}
+Tcells = Seurat::RunPCA(Tcells, assay='integrated')
+invisible(gc())
+Seurat::DefaultAssay(Tcells)='integrated'
+```
+
+Then, we calculated the number of PCs to use when finding the clusters in the next steps, by finding where the principal components start to elbow.
+
+```{r eval=FALSE}
+# Calculate the first metric:
+pct = Tcells[["pca"]]@stdev /sum(Tcells[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+
+# Calculate the second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 15
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (15) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=15
+ggplot2::ggplot(data=tcells_before_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = tcells_before_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(tcells_before_elbowDF$pct[tcells_before_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+After finding the elbow, we determined the K-nearest neighbors using the calculated elbow and found the clusters. We used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+Tcells = Seurat::FindNeighbors(Tcells, dims=1:elbow)
+
+# Find clusters:
+Tcells = Seurat::FindClusters(Tcells, resolution=seq(0.1, 1, by=.1))
+
+# Run UMAP visualization:
+Tcells = Seurat::RunUMAP(Tcells, dims=1:elbow, reduction='pca')
+```
+
+
+### Check Quality of Clusters
+
+We explored if certain metrics and metadata are source of variation, which helps assessing the quality of the clustering
+
+```{r eval=FALSE}
+metrics =  c("nUMI", "nGene", "S.Score", "G2M.Score", "percent.mitochondrial_RNA")
+feature_plots(Tcells, metrics, ncol=2, with_dimplot=F, point_size=0.2)
+Seurat::DimPlot(Tcells, reduction="umap", group.by=c('dataset', 'Phase', 'state'), label=FALSE)
+```
+
+```{r fig.width=10, fig.height=20, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+list_plots = list()
+
+list_plots[['nUMI']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nUMI)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nUMI") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['nGene']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=nGene)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("nGene") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['S.Score']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=S.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("S.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['G2M.Score']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=G2M.Score)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("G2M.Score") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['percent.mitochondrial_RNA']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=percent.mitochondrial_RNA)) +
+  ggplot2::geom_point(size=.5) + ggplot2::ggtitle("percent.mitochondrial_RNA") +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['dataset']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=dataset)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("dataset") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['Phase']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=Phase)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("Phase") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+list_plots[['state']] =  ggplot2::ggplot(tcells_before_meta, ggplot2::aes(x=UMAP_1, y=UMAP_2, color=state)) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle("state") +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+
+patchwork::wrap_plots(list_plots, ncol=2)
+```
+
+
+### Choose Cluster Resolution
+
+#### Check clustree results and gene expression
+
+We used 10 different resolutions so that we could find the resolution that best separates the cells into clusters with interesting biological information.The best resolution was chosen based on the stability of the clusters between different resolutions and the expression of cell-type markers, with the help of the [clustree](https://cran.r-project.org/web/packages/clustree/index.html) package [@R-clustree] (v.0.4.3).
+
+The *clustree* results, accompanied with UMAP visualizations for 4 different resolutions, is shown:
+
+```{r eval=FALSE}
+# 4. Use clustree:
+library(ggraph)
+clust_tree = clustree::clustree(Tcells, prefix='integrated_snn_res.')
+# Visualize 4 different resolutions:
+clusters_01 = Seurat::DimPlot(Tcells, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_04 = Seurat::DimPlot(Tcells, reduction="umap", group.by='integrated_snn_res.0.2', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Tcells, reduction="umap", group.by='integrated_snn_res.0.3', label=TRUE, label.size=6, pt.size=.2)
+clusters_08 = Seurat::DimPlot(Tcells, reduction="umap", group.by='integrated_snn_res.0.4', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_02) / (clusters_03 | clusters_04)) | clust_tree
+```
+
+```{r fig.width=15, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+clusters = list()
+for(res in c('integrated_snn_res.0.1', 'integrated_snn_res.0.2', 'integrated_snn_res.0.3', 'integrated_snn_res.0.4')){
+  tcells_before_meta[,res] = factor(as.character(tcells_before_meta[,res]), levels=as.character(0:max(tcells_before_meta[,res])))
+  x = c()
+  y = c()
+  for(cluster in levels(tcells_before_meta[,res])){
+    x = c(x, mean(tcells_before_meta$UMAP_1[as.character(tcells_before_meta[,res])==cluster]))
+    y = c(y, mean(tcells_before_meta$UMAP_2[as.character(tcells_before_meta[,res])==cluster]))
+  }
+  clusters[[res]] = ggplot2::ggplot(tcells_before_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=res)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(res) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_before_meta[,res]), color='black')
+}
+((clusters$integrated_snn_res.0.1 | clusters$integrated_snn_res.0.2) / (clusters$integrated_snn_res.0.3 | clusters$integrated_snn_res.0.4)) | tcells_before_clustree
+```
+
+We next assessed the expression of T-cell gene markers mapped into UMAP plots and violin plots (this last type of plots with resolution 0.2 as reference):
+
+
+| Genes            | Cell-Types            |
+|:---------------- |:--------------------- |
+| CD3E, CD3D, CD3G | T-cells               |
+| CD8A             | CD8+ T-cells          |
+| CD4              | CD4+ T-cells          |
+| TRGC1, TRGC2     | $\gamma\delta$T-cells |
+| KLRB1            | NK-like               |
+| CXCL13           | CXCL13+ T-cells       |
+| IL2RA            | Regulatory T-cells    |
+| IL17A            | Th17 cells            |
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Tcells, reduction='umap', features=c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD8A', 'rna_CD4', 'rna_TRGC1', 'rna_TRGC2', 'rna_KLRB1', 'rna_CXCL13', 'rna_IL2RA', 'rna_IL17A'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Tcells, c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD8A', 'rna_CD4', 'rna_TRGC1', 'rna_TRGC2', 'rna_KLRB1', 'rna_CXCL13', 'rna_IL2RA', 'rna_IL17A'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=20, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(tcells_before_meta$integrated_snn_res.0.2)){
+  x = c(x, mean(tcells_before_meta$UMAP_1[as.character(tcells_before_meta$integrated_snn_res.0.2)==cluster]))
+  y = c(y, mean(tcells_before_meta$UMAP_2[as.character(tcells_before_meta$integrated_snn_res.0.2)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD8A', 'rna_CD4', 'rna_TRDC', 'rna_TRGC1', 'rna_TRGC2', 'rna_KLRB1', 'rna_CXCL13', 'rna_IL2RA', 'rna_IL17A')){
+  umaps[[gene]] = ggplot2::ggplot(tcells_before_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_before_meta$integrated_snn_res.0.2), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(tcells_before_meta, ggplot2::aes_string(x='integrated_snn_res.0.2', y=gene,
+                                                                   fill='integrated_snn_res.0.2')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(tcells_before_meta[, gene])))
+}
+
+final_plots = list()
+for(gene in c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD8A', 'rna_CD4', 'rna_TRDC', 'rna_TRGC1', 'rna_TRGC2', 'rna_KLRB1', 'rna_CXCL13', 'rna_IL2RA', 'rna_IL17A')){
+  final_plots[[paste('a', gene, sep='_')]] = umaps[[gene]]
+  final_plots[[paste('b', gene, sep='_')]] = vlns[[gene]]
+}
+patchwork::wrap_plots(final_plots, ncol=4)
+```
+
+#### Subset T-cells for further sub-clustering
+
+After looking into the expression of these T-cell gene markers (and others, not shown) mapped into UMAP plots and violin plots (for resolution 0.2), as well as the clustree results, we decided to assess if it made sense to separate the clusters according to resolution 0.2 and further sub-cluster each of these individually. Our main objective was to separate T-cells not only into CD4+, CD8+, regulatory, NK and non-conventional T-cells, but into further sub-clusters of these cell-types (which was not possible with the same pipeline applied to the previous groups of cells).
+
+Looking into the resolution 0.2, we could know at this point that the clusters corresponded, more or less, to the following major annotations:
+
+| Clusters | Annotations                        |
+|:-------- |:---------------------------------- |
+| 0        | CD4+                               |
+| 1        | CD8+                               |
+| 2        | Regulatory Tcells                  |
+| 3        | gd Tcells + NK-like + ILCs         |
+| 4        | CD8+ + CD4+ expressing CXCL13      |
+| 5        | CD4+ (mostly Th17)                 |
+| 6        | Proliferative T-cells              |
+| 7        | CD4+                               |
+
+We next used the [SIGMA](https://github.com/Siliegia/SIGMA) R package to check how clusterable each cluster in resolution 0.2 were, and if that was due to meaningful variability (for example, we do not want to end up clustering cells according to dataset of origin).
+
+We first subsetted our *Tcells* dataset to a quarter of the original number of cells, for computational reasons. We used the integrated counts, as those were already corrected for dataset of origin, cell cycle and percentage of mitochondrial RNA.
+
+```{r eval=FALSE}
+# 1. Subset cells to a quarter of the original
+n_cells = round(dim(Tcells@assays$integrated@data)[2] / 4)
+sampled_cells = colnames(Tcells@assays$integrated@data)[sample(1:dim(Tcells@assays$integrated@data)[2], n_cells)]
+
+# 2. Check if subsetting still resembles unsubsetted dataset
+clusters_02 | Seurat::DimPlot(subset(Tcells, cells=sampled_cells), reduction="umap", group.by='integrated_snn_res.0.2',
+                              label=TRUE, label.size=6, pt.size=.2)
+
+# 3. Subset dataset
+Tcells_subset = subset(Tcells, cells=sampled_cells)
+invisible(gc())
+
+# 4. Get integrated dataset
+sigma_data = as.matrix(SeuratObject::GetAssayData(Tcells_subset, assay='integrated', slot='data'))
+invisible(gc())
+
+# 5. Get vector with resolution 0.2 clusters and dataset
+clusters_02_vector = Tcells_subset@meta.data[colnames(sigma_data), 'integrated_snn_res.0.2']
+dataset_vector = Tcells_subset@meta.data[colnames(sigma_data), 'dataset']
+```
+
+After successfully processing the data for *SIGMA*, we ran the tool.
+
+```{r eval=FALSE}
+SIGMA_all_res02 = SIGMA::sigma_funct(sigma_data, clusters_02_vector)
+
+# 2.1. Save SIGMA result
+saveRDS(SIGMA_all_res02, paste(project_dir, '2_annotation/results_Tcells/datasets/SIGMA_all_res02.Rdata', sep='/'))
+```
+
+After obtaining the results, we first checked the clusterability for all clusters. This is measured by the metric *SIGMA*, which goes from 0 to 1. The closer to 1, the more clusterable.
+
+```{r fig.width=10, fig.height=5, out.width='80%', fig.align='center', warning=FALSE, error=FALSE, message=FALSE, results='hold'}
+SIGMA::plot_sigma(SIGMA_all_res02)
+
+SIGMA_all_res02$maximum_measure
+```
+
+Then, we visually checked if the clusterability was not due to dataset of origin:
+
+```{r eval=FALSE}
+dtSIGMA_C0 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '0', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='0']) + ggplot2::ggtitle('Cluster 0')
+
+dtSIGMA_C1 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '1', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='1']) + ggplot2::ggtitle('Cluster 1')
+
+dtSIGMA_C2 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '2', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='2']) + ggplot2::ggtitle('Cluster 2')
+
+dtSIGMA_C3 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '3', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='3']) + ggplot2::ggtitle('Cluster 3')
+
+dtSIGMA_C4 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '4', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='4']) + ggplot2::ggtitle('Cluster 4')
+
+dtSIGMA_C5 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '5', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='5']) + ggplot2::ggtitle('Cluster 5')
+
+dtSIGMA_C6 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '6', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='6']) + ggplot2::ggtitle('Cluster 6')
+
+dtSIGMA_C7 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '7', colour=dataset_vector[Tcells_subset@meta.data$integrated_snn_res.0.2=='7']) + ggplot2::ggtitle('Cluster 7')
+
+patchwork::wrap_plots(list(dtSIGMA_C0, dtSIGMA_C1, dtSIGMA_C2, dtSIGMA_C3, dtSIGMA_C4, dtSIGMA_C5, dtSIGMA_C6,dtSIGMA_C7), ncol=2)
+```
+
+```{r results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, include=FALSE}
+dataset_vector = tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr), 'dataset']
+tcells_before_meta$integrated_snn_res.0.2 = factor(as.character(tcells_before_meta$integrated_snn_res.0.2), as.character(0:(length(unique(tcells_before_meta$integrated_snn_res.0.2))-1)))
+
+dtSIGMA_C0 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '0', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='0']) + ggplot2::ggtitle('Cluster 0')
+
+dtSIGMA_C1 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '1', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='1']) + ggplot2::ggtitle('Cluster 1')
+
+dtSIGMA_C2 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '2', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='2']) + ggplot2::ggtitle('Cluster 2')
+
+dtSIGMA_C3 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '3', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='3']) + ggplot2::ggtitle('Cluster 3')
+
+dtSIGMA_C4 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '4', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='4']) + ggplot2::ggtitle('Cluster 4')
+
+dtSIGMA_C5 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '5', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='5']) + ggplot2::ggtitle('Cluster 5')
+
+dtSIGMA_C6 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '6', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='6']) + ggplot2::ggtitle('Cluster 6')
+
+dtSIGMA_C7 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '7', colour=dataset_vector[tcells_before_meta[colnames(SIGMA_all_res02$input_parameters$expr),'integrated_snn_res.0.2']=='7']) + ggplot2::ggtitle('Cluster 7')
+
+sigma_plots = patchwork::wrap_plots(list(dtSIGMA_C0, dtSIGMA_C1, dtSIGMA_C2, dtSIGMA_C3, dtSIGMA_C4, dtSIGMA_C5, dtSIGMA_C6,dtSIGMA_C7), ncol=2)
+```
+
+```{r fig.width=15, fig.height=20, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+sigma_plots
+```
+
+With the exception of cluster 7, which had no clusterability (*SIGMA* = 0), all other clusters had a clusterability higher than 0.89. Also, the variability in the clusters with high *SIGMA* values was not coming from the source dataset.
+
+With these results, we decided we could subcluster each cluster individually to obtain more fine-grained annotations.
+
+
+## Annotate Clusters 0 and 7
+
+...
+
+
+
+
