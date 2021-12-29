@@ -253,7 +253,7 @@ Looking into the resolution 0.2, we could know at this point that the clusters c
 | 6        | Proliferative T-cells              |
 | 7        | CD4+                               |
 
-We next used the [SIGMA](https://github.com/Siliegia/SIGMA) R package to check how clusterable each cluster in resolution 0.2 were, and if that was due to meaningful variability (for example, we do not want to end up clustering cells according to dataset of origin).
+We next used the [SIGMA](https://github.com/Siliegia/SIGMA) package [@R-SIGMA] (v.0.0.0.1) to check how clusterable each cluster in resolution 0.2 were, and if that was due to meaningful variability (for example, we do not want to end up clustering cells according to dataset of origin).
 
 We first subsetted our *Tcells* dataset to a quarter of the original number of cells, for computational reasons. We used the integrated counts, as those were already corrected for dataset of origin, cell cycle and percentage of mitochondrial RNA.
 
@@ -352,8 +352,471 @@ With these results, we decided we could subcluster each cluster individually to 
 
 ## Annotate Clusters 0 and 7
 
-...
+When looking into the UMAP visualizations of the Tcells clusters from resolution 0.2, including the expression of gene markers and how cluster 7 did not have any clusterability, clusters 0 and 7 seemed to represent the same cell-type(s). As such, we decided to merge these two clusters together.
 
+```{r eval=FALSE}
+Tcells_07 = subset(Tcells, cells=rownames(Tcells@meta.data)[Tcells$integrated_snn_res.0.2%in%c('0', '7')])
+Tcells_07[['previous_0_7']] = Tcells_07$integrated_snn_res.0.2
+
+(Seurat::DimPlot(Tcells, group.by = 'integrated_snn_res.0.2', label=T, label.size=4) + ggplot2::theme_minimal() + Seurat::NoLegend()) |
+  (Seurat::DimPlot(Tcells_07, group.by = 'previous_0_7', label=T, label.size=4) + ggplot2::theme_minimal() + Seurat::NoLegend())
+```
+
+```{r fig.width=15, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+cells_07 = rownames(tcells_before_meta)[tcells_before_meta$integrated_snn_res.0.2%in%c('0', '7')]
+
+x = c()
+y = c()
+for(cluster in levels(tcells_before_meta[,'integrated_snn_res.0.2'])){
+  x = c(x, mean(tcells_before_meta$UMAP_1[as.character(tcells_before_meta[,'integrated_snn_res.0.2'])==cluster]))
+  y = c(y, mean(tcells_before_meta$UMAP_2[as.character(tcells_before_meta[,'integrated_snn_res.0.2'])==cluster]))
+}
+tcells_all = ggplot2::ggplot(tcells_before_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color='integrated_snn_res.0.2')) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle('All clusters') +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+  ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_before_meta[,'integrated_snn_res.0.2']), color='black')
+
+x2 = c()
+y2 = c()
+for(cluster in levels(tcells_before_meta[cells_07,'integrated_snn_res.0.2'])){
+  x2 = c(x2, mean(tcells_before_meta$UMAP_1[as.character(tcells_before_meta[,'integrated_snn_res.0.2'])==cluster]))
+  y2 = c(y2, mean(tcells_before_meta$UMAP_2[as.character(tcells_before_meta[,'integrated_snn_res.0.2'])==cluster]))
+}
+tcells_07 = ggplot2::ggplot(tcells_before_meta[cells_07,], ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color='integrated_snn_res.0.2')) +
+  ggplot2::geom_point(size=.2) + ggplot2::ggtitle('Only clusters 0 and 7') +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+  ggplot2::annotate(geom='text', x=x2, y=y2, label=levels(tcells_before_meta[,'integrated_snn_res.0.2']), color='black')
+
+tcells_all | tcells_07
+```
+
+
+### Find Clusters
+
+After subsetting the dataset to obtain only the cells from clusters 0 and 7, we prepared the data for clustering by running PCA and calculating the elbow.
+
+```{r eval=FALSE}
+# PCA:
+Tcells_07 = Seurat::RunPCA(Tcells_07, assay='integrated')
+
+# Calculate Elbow:
+# First metric:
+pct = Tcells_07[["pca"]]@stdev /sum(Tcells_07[["pca"]]@stdev) * 100
+cumu = cumsum(pct)
+co1 = which(cumu > 90 & pct < 5)[1]
+# Second metric:
+co2 = sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+# Where the elbow occurs:
+elbow = min(co1, co2) # elbow is 5
+```
+
+This is a visual representation of the elbow plot:
+
+```{r eval=FALSE}
+plot_df = data.frame(pct=pct, cumu=cumu, rank=1:length(pct))
+ggplot2::ggplot(plot_df, ggplot2::aes(cumu, pct, label = rank, color = rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.cap="Elbow plot. The last PC (5) colored in red corresponds to the elbow.", fig.align='center'}
+elbow=5
+ggplot2::ggplot(data=tcells_07_elbowDF, ggplot2::aes_string('cumu', 'pct', label = 'rank', color = tcells_07_elbowDF$rank > elbow)) + 
+  ggplot2::geom_text() + 
+  ggplot2::geom_vline(xintercept = 90, color = "grey") + 
+  ggplot2::geom_hline(yintercept = min(tcells_07_elbowDF$pct[tcells_07_elbowDF$pct > 5]), color = "grey") +
+  ggplot2::theme_bw() + ggplot2::theme(legend.position = "none")
+```
+
+After finding the elbow, we determined the K-nearest neighbors using the calculated elbow and found the clusters. We also used a set of 10 different resolutions, ranging from 0.1 to 1 at a step of 0.1.
+
+```{r eval=FALSE}
+# Determine the K-nearest neighbor graph
+Tcells_07 = Seurat::FindNeighbors(Tcells_07, dims=1:elbow)
+
+# Find clusters:
+Tcells_07 = Seurat::FindClusters(Tcells_07, resolution=seq(0.1, 1, by=.1))
+
+# Run UMAP visualization:
+Tcells_07 = Seurat::RunUMAP(Tcells_07, dims=1:elbow, reduction='pca')
+```
+
+### Choose Cluster Resolution
+
+Again, we used 10 different resolutions so that we could find the resolution that best separates the cells into clusters with interesting biological information.The best resolution was chosen based on the stability of the clusters between different resolutions and the expression of cell-type markers, with the help of the [clustree](https://cran.r-project.org/web/packages/clustree/index.html) package [@R-clustree] (v.0.4.3).
+
+The *clustree* results, accompanied with UMAP visualizations for 3 different resolutions, is shown. We also show a UMAP with the cells colored by the  'cluster of origin' (clusters 0 and 7 from full dataset of Tcells), to assess if they are being separated by these two clusters and not by cell-type.
+
+```{r eval=FALSE}
+# 4. Use clustree:
+library(ggraph)
+clust_tree = clustree::clustree(Tcells_07, prefix='integrated_snn_res.')
+# Visualize 4 different resolutions:
+clusters_01 = Seurat::DimPlot(Tcells_07, reduction="umap", group.by='integrated_snn_res.0.1', label=TRUE, label.size=6, pt.size=.2)
+clusters_04 = Seurat::DimPlot(Tcells_07, reduction="umap", group.by='integrated_snn_res.0.2', label=TRUE, label.size=6, pt.size=.2)
+clusters_07 = Seurat::DimPlot(Tcells_07, reduction="umap", group.by='integrated_snn_res.0.9', label=TRUE, label.size=6, pt.size=.2)
+clusters_08 = Seurat::DimPlot(Tcells_07, reduction="umap", group.by='previous_0_7', label=TRUE, label.size=6, pt.size=.2)
+((clusters_01 | clusters_04) / (clusters_07 | clusters_08)) | clust_tree
+```
+
+```{r fig.width=15, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+clusters = list()
+for(res in c('integrated_snn_res.0.1', 'integrated_snn_res.0.2', 'integrated_snn_res.0.9', 'previous_0_7')){
+  tcells_07_meta[,res] = factor(as.character(tcells_07_meta[,res]), levels=as.character(0:max(tcells_07_meta[,res])))
+  x = c()
+  y = c()
+  for(cluster in levels(tcells_07_meta[,res])){
+    x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta[,res])==cluster]))
+    y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta[,res])==cluster]))
+  }
+  clusters[[res]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=res)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(res) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta[,res]), color='black')
+}
+((clusters$integrated_snn_res.0.1 | clusters$integrated_snn_res.0.2) / (clusters$integrated_snn_res.0.9 | clusters$previous_0_7)) | tcells_07_clustree
+```
+
+It is possible to see that 'cluster of origin' is not a source of variation between the clusters calculated. Furthermore, the resolution that we ended up choosing was 0.1, after looking into the *clustree* results above, and the expression of gene markers that we show next.
+
+### Check Gene Expression
+
+The following markers were used to annotate the cell-types:
+
+| Genes                                     | Cell-Types                           |
+|:----------------------------------------- |:------------------------------------ |
+| CD3E, CD3D, CD3G, CD4, TRAC, TRBC1, TRBC2 | CD4+ T-cells                         |
+| CCR7, SELL                                | Naive T-cells                        |
+| CCR7, SELL, PASK                          | Central Memory (CM) T-cells          |
+| ZNF683                                    | Tissue Resident Memory (TRM) T-cells |
+| KLRB1, S100A4, PTPRCAP, PFN1, GZMA        | Effector Memory (EM) T-cells         |
+
+To assess the expression of these marker genes, we visualized their expression mapped into UMAP plots and violin plots.
+
+#### CD4+ T-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Tcells_07, reduction='umap', features=c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD4', 'rna_TRAC', 'rna_TRBC1', 'rna_TRBC2'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Tcells_07, c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD4', 'rna_TRAC', 'rna_TRBC1', 'rna_TRBC2'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=15, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(tcells_07_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD4', 'rna_TRAC', 'rna_TRBC1', 'rna_TRBC2')){
+  umaps[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta$integrated_snn_res.0.1), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='integrated_snn_res.0.1', y=gene,
+                                                                   fill='integrated_snn_res.0.1')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(tcells_07_meta[, gene])))
+}
+
+final_plots = list()
+for(gene in c('rna_CD3E', 'rna_CD3D', 'rna_CD3G', 'rna_CD4', 'rna_TRAC', 'rna_TRBC1', 'rna_TRBC2')){
+  final_plots[[paste('a', gene, sep='_')]] = umaps[[gene]]
+  final_plots[[paste('b', gene, sep='_')]] = vlns[[gene]]
+}
+patchwork::wrap_plots(final_plots, ncol=4)
+```
+
+#### Naive T-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Tcells_07, reduction='umap', features=c('rna_CCR7', 'rna_SELL'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Tcells_07, c('rna_CCR7', 'rna_SELL'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(tcells_07_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CCR7', 'rna_SELL')){
+  umaps[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta$integrated_snn_res.0.1), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='integrated_snn_res.0.1', y=gene,
+                                                                   fill='integrated_snn_res.0.1')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(tcells_07_meta[, gene])))
+}
+
+final_plots = list()
+for(gene in c('rna_CCR7', 'rna_SELL')){
+  final_plots[[paste('a', gene, sep='_')]] = umaps[[gene]]
+  final_plots[[paste('b', gene, sep='_')]] = vlns[[gene]]
+}
+patchwork::wrap_plots(final_plots, ncol=4)
+```
+
+#### Central Memory (CM) T-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Tcells_07, reduction='umap', features=c('rna_CCR7', 'rna_SELL', 'rna_PASK'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Tcells_07, c('rna_CCR7', 'rna_SELL', 'rna_PASK'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(tcells_07_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_CCR7', 'rna_SELL', 'rna_PASK')){
+  umaps[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta$integrated_snn_res.0.1), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='integrated_snn_res.0.1', y=gene,
+                                                                   fill='integrated_snn_res.0.1')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(tcells_07_meta[, gene])))
+}
+
+final_plots = list()
+for(gene in c('rna_CCR7', 'rna_SELL', 'rna_PASK')){
+  final_plots[[paste('a', gene, sep='_')]] = umaps[[gene]]
+  final_plots[[paste('b', gene, sep='_')]] = vlns[[gene]]
+}
+patchwork::wrap_plots(final_plots, ncol=4)
+```
+
+#### Tissue Resident Memory (TRM) T-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Tcells_07, reduction='umap', features=c('rna_ZNF683'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Tcells_07, c('rna_ZNF683'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(tcells_07_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_ZNF683')){
+  umaps[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta$integrated_snn_res.0.1), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='integrated_snn_res.0.1', y=gene,
+                                                                   fill='integrated_snn_res.0.1')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(tcells_07_meta[, gene])))
+}
+
+final_plots = list()
+for(gene in c('rna_ZNF683')){
+  final_plots[[paste('a', gene, sep='_')]] = umaps[[gene]]
+  final_plots[[paste('b', gene, sep='_')]] = vlns[[gene]]
+}
+patchwork::wrap_plots(final_plots, ncol=2)
+```
+
+#### Effector Memory (EM) T-cells
+
+```{r eval=FALSE}
+umap = Seurat::FeaturePlot(Tcells_07, reduction='umap', features=c('rna_KLRB1', 'rna_S100A4', 'rna_PTPRCAP', 'rna_PFN1', 'rna_GZMA'), label=TRUE, ncol=1) +
+  ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2), limits=c(1e-5, NA)) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom")
+
+vln = Seurat::VlnPlot(Tcells_07, c('rna_KLRB1', 'rna_S100A4', 'rna_PTPRCAP', 'rna_PFN1', 'rna_GZMA'), ncol=1) +
+  ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+umap | vln
+```
+
+```{r fig.width=10, fig.height=10, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+x = c()
+y = c()
+for(cluster in levels(tcells_07_meta$integrated_snn_res.0.1)){
+  x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+  y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta$integrated_snn_res.0.1)==cluster]))
+}
+
+umaps = list()
+vlns = list()
+
+for(gene in c('rna_KLRB1', 'rna_S100A4', 'rna_PTPRCAP', 'rna_PFN1', 'rna_GZMA')){
+  umaps[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=gene)) +
+    ggplot2::geom_point(size=.6) + ggplot2::ggtitle(gsub('rna_', '', gene)) +
+    ggplot2::scale_color_gradientn(colours=c("navy", "yellow"), na.value=grDevices::rgb(.75, .75, .75, alpha=.2),
+                                   limits=c(1e-5, NA)) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "bottom") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta$integrated_snn_res.0.1), color='black')
+  
+  vlns[[gene]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='integrated_snn_res.0.1', y=gene,
+                                                                   fill='integrated_snn_res.0.1')) +
+    ggplot2::geom_violin(trim=FALSE, scale='width') + ggplot2::theme_minimal() + ggplot2::theme(legend.position="none") +
+    ggplot2::labs(x='', y='', title=gsub('rna_', '', gene)) + ggplot2::ylim(c(0,max(tcells_07_meta[, gene])))
+}
+
+final_plots = list()
+for(gene in c('rna_KLRB1', 'rna_S100A4', 'rna_PTPRCAP', 'rna_PFN1', 'rna_GZMA')){
+  final_plots[[paste('a', gene, sep='_')]] = umaps[[gene]]
+  final_plots[[paste('b', gene, sep='_')]] = vlns[[gene]]
+}
+patchwork::wrap_plots(final_plots, ncol=4)
+```
+
+
+### Final Annotation
+
+Looking into the expression of genes from the previous point, we knew that the cell-types of the clusters were the following:
+
+| Clusters | Final_Annotation                   |
+|:-------  |:---------------------------------- |
+| 0        | Effector Memory (EM) CD4+ T-cells  |
+| 1        | Naive CD4+ T-cells                 |
+| 2        | Central Memory (CM) CD4+ T-cells   |
+
+The annotations were stored in the metadata of the seurat object, with the variable names corresponding to the column in the previous table:
+
+```{r eval=FALSE}
+Tcells_07[['Final_Annotation']] = rep('', length(Tcells_07$integrated_snn_res.0.1))
+
+EM_cells = rownames(Tcells_07@meta.data)[Tcells_07$integrated_snn_res.0.1=='0']
+Tcells_07@meta.data[EM_cells, 'Final_Annotation'] = 'EM CD4'
+
+naive_cells = rownames(Tcells_07@meta.data)[Tcells_07$integrated_snn_res.0.1=='1']
+Tcells_07@meta.data[naive_cells, 'Final_Annotation'] = 'Naive CD4'
+
+CM_cells = rownames(Tcells_07@meta.data)[Tcells_07$integrated_snn_res.0.1=='2']
+Tcells_07@meta.data[CM_cells, 'Final_Annotation'] = 'CM CD4'
+```
+
+Then, we checked the previous SIGMA results and coloured clusters 0 and 7 by the new annotations:
+
+```{r eval=FALSE}
+cluster_0_cells = rownames(Tcells_07@meta.data)[Tcells_07$previous_0_7=='0']
+cluster_7_cells = rownames(Tcells_07@meta.data)[Tcells_07$previous_0_7=='7']
+subclusters_0 = Tcells_07$Final_Annotation[intersect(colnames(SIGMA_all_res02$input_parameters$expr), cluster_0_cells)]
+subclusters_7 = Tcells_07$Final_Annotation[intersect(colnames(SIGMA_all_res02$input_parameters$expr), cluster_7_cells)]
+
+SIGMA::plot_singular_vectors(SIGMA_all_res02, '0', colour=as.character(subclusters_0))
+SIGMA::plot_singular_vectors(SIGMA_all_res02, '7', colour=as.character(subclusters_7))
+```
+
+```{r results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, include=FALSE}
+cluster_0_cells = rownames(tcells_07_meta)[tcells_07_meta$previous_0_7=='0']
+cluster_7_cells = rownames(tcells_07_meta)[tcells_07_meta$previous_0_7=='7']
+subclusters_0 = tcells_07_meta[intersect(colnames(SIGMA_all_res02$input_parameters$expr), cluster_0_cells), 'Final_Annotation']
+subclusters_7 = tcells_07_meta[intersect(colnames(SIGMA_all_res02$input_parameters$expr), cluster_7_cells), 'Final_Annotation']
+
+sigma_C0 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '0', colour=as.character(subclusters_0))
+sigma_C7 = SIGMA::plot_singular_vectors(SIGMA_all_res02, '7', colour=as.character(subclusters_7))
+
+sigma_plots = patchwork::wrap_plots(list(sigma_C0, sigma_C7), ncol=2)
+```
+
+```{r fig.width=15, fig.height=5, out.width='100%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+sigma_plots
+```
+
+UMAP visualizations with cells coloured by the new annotations:
+
+```{r eval=FALSE}
+Seurat::DimPlot(Tcells_07, group.by='Final_Annotation', pt.size=0.5, label=T, label.size=3) +
+  ggplot2::ggtitle('') + ggplot2::theme_minimal() + Seurat::NoLegend()
+```
+
+```{r fig.width=8, fig.height=5, out.width='80%', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE, fig.align='center'}
+tcells_anots = list()
+for(level in c('Final_Annotation')){
+  tcells_07_meta[,level] = factor(as.character(tcells_07_meta[,level]), levels=unique(tcells_07_meta[,level]))
+  x = c()
+  y = c()
+  for(cluster in levels(tcells_07_meta[,level])){
+    x = c(x, mean(tcells_07_meta$UMAP_1[as.character(tcells_07_meta[,level])==cluster]))
+    y = c(y, mean(tcells_07_meta$UMAP_2[as.character(tcells_07_meta[,level])==cluster]))
+  }
+  tcells_anots[[level]] = ggplot2::ggplot(tcells_07_meta, ggplot2::aes_string(x='UMAP_1', y='UMAP_2', color=level)) +
+    ggplot2::geom_point(size=.2) + ggplot2::ggtitle(level) +
+    ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none") +
+    ggplot2::annotate(geom='text', x=x, y=y, label=levels(tcells_07_meta[,level]), color='black')
+}
+patchwork::wrap_plots(tcells_anots, ncol=1)
+```
+
+
+### Save Data
+
+Finally, we saved the object. It was necessary for when we later on joined together the annotations from all clusters.
+
+```{r eval=FALSE}
+SeuratDisk::SaveH5Seurat(Tcells_07, paste(project_dir, '2_annotation/results_Tcells/datasets/Tcells_07.h5Seurat', sep='/'), overwrite=TRUE)
+```
+
+
+## Annotate Cluster 1
+
+...
 
 
 
