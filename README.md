@@ -105,7 +105,16 @@ The scripts developed to construct the CRC atlas are organized in this project a
 
 ## 3. Where atlas files are available
 
-The final atlas files are made available at [UPCOMING].
+The following files are available:
+
+| File                                                                                                    | Format     | Size     | Observations                                                        |
+|---------------------------------------------------------------------------------------------------------|------------|----------|---------------------------------------------------------------------|
+| [CRCatlas.h5Seurat](https://drive.google.com/file/d/129dNBGHP9bo30P8Kj-m0jgMqe3e9-mgD/view?usp=sharing) | *h5Seurat* | 3.82GB   | **The full dataset**. It includes all annotations and metadata, with both *RNA* and *integrated* assays. |
+| [CRCatlas.h5Seurat](https://drive.google.com/file/d/1C1kzMzEB2Txj-nuNhGMEcI_gnI6C3VxA/view?usp=sharing) | *h5Seurat* | 1.52GB   | It includes all annotations and metadata, but only the *RNA* assay. |
+| [CRCatlas_PH.h5ad](https://drive.google.com/file/d/18aYKlknYvKTqX9WaCW1uQnMDUlXYAzk8/view?usp=sharing)  | *h5ad*     | 1.52GB   | It includes all annotations and metadata, but only the *RNA* assay. |
+| [metadata.csv](https://drive.google.com/file/d/1ZxCG-DHYBJKzfMttvChYsKIzYqUm7NB4/view?usp=sharing)      | *CSV*      | 110.2 MB | Only the metadata                                                   |
+
+
 
 
 <!-- ## 4. How to reference this atlas -->
