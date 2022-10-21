@@ -2,11 +2,11 @@
 
 README Contents:
 
-1. [Datasets Collected](https://github.com/saracardoso/CRC_ATLAS#datasets-collected)
+1. [Datasets Collected](https://github.com/saracardoso/CRC_ATLAS#1-datasets-collected)
 
-2. [How this project is organized](https://github.com/saracardoso/CRC_ATLAS#how-this-project-is-organized)
+2. [How this project is organized](https://github.com/saracardoso/CRC_ATLAS#2-how-this-project-is-organized)
 
-3. [Where atlas files are available](https://github.com/saracardoso/CRC_ATLAS#where-atlas-files-are-available)
+3. [Where atlas files are available](https://github.com/saracardoso/CRC_ATLAS#3-where-atlas-files-are-available)
 
 
 This project contains the scripts developed to construct a CRC atlas of tumour and normal matched tissue of patients. Also, samples from heatlhy donors were inserted. 
