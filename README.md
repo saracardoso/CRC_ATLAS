@@ -84,7 +84,7 @@ Raw counts from four publicly available datasets were used to construct the atla
 | **Nº Cells (before QC)** | 44 684                            | 63 689                            | 27 414                            | 51 705                             |
 | **Nº Cells (after QC)**  | 29 793                            | 57 804                            | 24 510                            | 50 811                             |
 | **Technology**           | 3’ 10xGenomics                    | 3’ 10xGenomics                    | 3’ 10xGenomics                    | 3’ 10xGenomics                     |
-| **Link to Article**      | [Link](10.1038/s41422-020-0355-0) | [Link](10.1038/s41588-020-0636-z) | [Link](10.1038/s41588-020-0636-z) | [Link](10.1016/j.cell.2019.06.029) |
+| **Link to Article**      | [Link](https://doi.org/10.1038/s41422-020-0355-0) | [Link](https://doi.org/10.1038/s41588-020-0636-z) | [Link](https://doi.org/10.1038/s41588-020-0636-z) | [Link](https://doi.org/10.1016/j.cell.2019.06.029) |
 
 Studies *CRC_Qian* and *GSE144735* have tumour (border and core) and normal matched mucosa samples for each patient. For study *GSE132465*, 10 of the 23 patients have tumour and normal matched mucosa samples, while the other 13 only have tumour samples. Regarding *Colon_smillie* dataset, each donor has a sample extracted from two different locations of the colon.
 
