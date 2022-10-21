@@ -1,5 +1,14 @@
 # CRC ATLAS
 
+README Contents:
+
+1. [Datasets Collected](https://github.com/saracardoso/CRC_ATLAS#datasets-collected)
+
+2. [How this project is organized](https://github.com/saracardoso/CRC_ATLAS#how-this-project-is-organized)
+
+3. [Where atlas files are available](https://github.com/saracardoso/CRC_ATLAS#where-atlas-files-are-available)
+
+
 This project contains the scripts developed to construct a CRC atlas of tumour and normal matched tissue of patients. Also, samples from heatlhy donors were inserted. 
 
 This atlas has a total of 163 810 cells, separated into 51 044 T-cells, 47 462 epithelial cells, 30 187 stromal
@@ -64,7 +73,7 @@ summarised in the following table:
 
 
 
-## Datasets Collected
+## 1. Datasets Collected
 
 Raw counts from four publicly available datasets were used to construct the atlas. Three correspond to CRC studies, while one (*Colon_smillie*) has data from colon of patients with ulcerative colitis and healthy individuals. As such, the samples related to the healthy individuals were used. The next table shows an overview of the datasets collected.
 
@@ -81,7 +90,7 @@ Studies *CRC_Qian* and *GSE144735* have tumour (border and core) and normal matc
 
 
 
-## How this project is organized
+## 2. How this project is organized
 
 The scripts developed to construct the CRC atlas are organized in this project as follows:
 
@@ -93,8 +102,11 @@ The scripts developed to construct the CRC atlas are organized in this project a
 
 - __*3_generate_atlas_files*__: script to generate the final atlas files
 
+
+## 3. Where atlas files are available
+
 The final atlas files are made available at [UPCOMING].
 
 
-<!-- ## How to reference this atlas -->
+<!-- ## 4. How to reference this atlas -->
 
